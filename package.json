@@ -1,12 +1,12 @@
 {
   "name": "nimbus-launcher",
   "productName": "Nimbus Launcher",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "A fast Minecraft: Java Edition launcher with Modrinth mods, modpacks, shaders and resource packs, every loader, every version, and a one-click FPS boost.",
   "main": "main.js",
   "license": "MIT",
   "author": "flayniks",
-  "repository": "github:flayniks/the-mod",
+  "repository": "github:flayniks/nimbus-launcher",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
@@ -33,7 +33,7 @@
     "publish": [
       {
         "provider": "generic",
-        "url": "https://github.com/flayniks/The-mod/releases/download/nimbus-latest",
+        "url": "https://github.com/flayniks/nimbus-launcher/releases/download/nimbus-latest",
         "channel": "latest"
       }
     ],
@@ -90,5 +90,6 @@
         ]
       }
     ]
-  }
+  },
+  "homepage": "https://github.com/flayniks/nimbus-launcher"
 }

@@ -5,7 +5,7 @@ const { spawn } = require('child_process');
 const { rulesAllow, splitArgs, osName, osArch } = require('./util');
 
 const LAUNCHER_NAME = 'nimbus-launcher';
-const LAUNCHER_VERSION = '1.0.0';
+const LAUNCHER_VERSION = require('../../package.json').version;
 
 function substitute(arg, vars) {
   return arg.replace(/\$\{([^}]+)\}/g, (whole, key) => (key in vars ? String(vars[key]) : whole));

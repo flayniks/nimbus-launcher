@@ -22,7 +22,7 @@ cd fabric-26 && ./gradlew build       # JDK 25
 cp fabric-1.21/build/libs/*.jar fabric-26/build/libs/*.jar ../resources/mods/
 ```
 
-The launcher bundles whatever is in `launcher/resources/mods/`. Bump `version` in both `gradle.properties` files when the mod changes, so existing instances get the new jar.
+The launcher bundles whatever is in `resources/mods/`. Bump `version` in both `gradle.properties` files when the mod changes, so existing instances get the new jar.
 
 ## Safety
 

@@ -23,7 +23,8 @@ A fast, good-looking launcher for **Minecraft: Java Edition** with licensed (Mic
 You need [Node.js](https://nodejs.org) 20 or newer.
 
 ```bash
-cd launcher
+git clone https://github.com/flayniks/nimbus-launcher.git
+cd nimbus-launcher
 npm install
 npm start          # run the launcher
 npm test           # offline unit tests
@@ -41,18 +42,18 @@ Build each platform on that platform. Cross-building Windows and macOS installer
 
 ## Downloading
 
-Grab **`Nimbus-Launcher-Setup.exe`** from the newest `nimbus-v…` release on this repository's Releases page. It's a normal installer with desktop and Start menu shortcuts. It isn't code-signed, so Windows SmartScreen may say "Windows protected your PC". Click **More info → Run anyway**.
+**[Download Nimbus-Launcher-Setup.exe](https://github.com/flayniks/nimbus-launcher/releases/latest/download/Nimbus-Launcher-Setup.exe)**. The link always gives the newest version. It's a normal installer with desktop and Start menu shortcuts. It isn't code-signed, so Windows SmartScreen may say "Windows protected your PC". Click **More info → Run anyway**.
 
 Once installed, it keeps itself up to date.
 
 ## Publishing an update
 
-1. On GitHub, open **Actions → Nimbus Launcher → Run workflow**.
+1. On GitHub, open **Actions → Release → Run workflow**.
 2. Pick **patch** (1.1.0 → 1.1.1), **minor** (→ 1.2.0) or **major** (→ 2.0.0) and press **Run workflow**.
 
 That's it. The workflow bumps the version, commits it, builds the installer on Windows, publishes a `nimbus-v…` release, and refreshes the `nimbus-latest` release that installed launchers check. Every launcher finds the update on its next start, or within four hours. It downloads in the background and shows **Update ready · Restart** in the title bar. If you don't restart, the update installs the next time the launcher closes.
 
-Pushing a change to `launcher/` also rebuilds the installer, but a launcher only updates when the version number goes up. So when you want people to get a change, use the button (or bump `version` in `launcher/package.json` yourself).
+Pushing to `main` also rebuilds the installer, but a launcher only updates when the version number goes up. So when you want people to get a change, use the button (or bump `version` in `package.json` yourself).
 
 Don't delete the `nimbus-latest` release: it's the update feed.
 

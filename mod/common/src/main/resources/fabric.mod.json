@@ -5,7 +5,7 @@
   "name": "Nimbus Core",
   "description": "Built into Nimbus Launcher: the animated Nimbus loading screen and the title screen badge.",
   "authors": ["flayniks"],
-  "contact": { "homepage": "https://github.com/flayniks/The-mod" },
+  "contact": { "homepage": "https://github.com/flayniks/nimbus-launcher", "sources": "https://github.com/flayniks/nimbus-launcher/tree/main/mod" },
   "license": "MIT",
   "icon": "assets/nimbus/icon.png",
   "environment": "client",

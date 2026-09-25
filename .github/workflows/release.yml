@@ -1,0 +1,112 @@
+name: Release
+
+# Builds the Windows installer and publishes it:
+#  - "nimbus-vX.Y.Z" is a normal release people can download from
+#  - "nimbus-latest" is the rolling feed the launcher's auto-updater reads
+#
+# To ship an update: Actions -> Release -> Run workflow -> pick patch/minor/major.
+# That bumps the version, commits it, builds and publishes. Everyone's launcher picks it up.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump for this release
+        type: choice
+        options: [patch, minor, major, none]
+        default: patch
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nimbus-launcher-release
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Bump version
+        if: github.event_name == 'workflow_dispatch' && inputs.bump != 'none'
+        run: |
+          npm version "${{ inputs.bump }}" --no-git-tag-version
+          V=$(node -p "require('./package.json').version")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Release Nimbus Launcher $V"
+          git push
+
+      - run: npm ci
+      - run: npm test
+      - run: npx electron-builder --win --publish never
+
+      - name: Read version
+        id: version
+        run: |
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Stable download name
+        run: cp "dist/Nimbus-Launcher-Setup-${{ steps.version.outputs.version }}.exe" dist/Nimbus-Launcher-Setup.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Nimbus-Launcher-Windows
+          path: |
+            dist/Nimbus-Launcher-Setup-*.exe
+            dist/latest.yml
+
+      - name: Publish versioned release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nimbus-v${{ steps.version.outputs.version }}
+          name: Nimbus Launcher ${{ steps.version.outputs.version }}
+          target_commitish: ${{ steps.version.outputs.sha }}
+          make_latest: 'true'
+          files: |
+            dist/Nimbus-Launcher-Setup-${{ steps.version.outputs.version }}.exe
+            dist/Nimbus-Launcher-Setup.exe
+          body: |
+            **Download `Nimbus-Launcher-Setup.exe` below, double-click it, done.**
+            Already have Nimbus? It updates itself — no need to download this again.
+
+            The installer is not code-signed, so Windows SmartScreen may say "Windows protected your PC".
+            Click **More info → Run anyway**.
+
+      - name: Update the auto-update feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.version.outputs.version }}
+          SHA: ${{ steps.version.outputs.sha }}
+        run: |
+          TAG=nimbus-latest
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "Nimbus Launcher update feed" --prerelease --target "$SHA" \
+              --notes "Read by the launcher's auto-updater. To install Nimbus, download from the newest nimbus-v release."
+          fi
+          # new files first, latest.yml last, so clients never see a feed pointing at a missing file
+          gh release upload "$TAG" "dist/Nimbus-Launcher-Setup-$V.exe" "dist/Nimbus-Launcher-Setup-$V.exe.blockmap" dist/Nimbus-Launcher-Setup.exe --clobber
+          gh release upload "$TAG" dist/latest.yml --clobber
+          for asset in $(gh release view "$TAG" --json assets -q '.assets[].name'); do
+            case "$asset" in
+              # block maps stay so older launchers can download just the changed parts
+              latest.yml|Nimbus-Launcher-Setup.exe|"Nimbus-Launcher-Setup-$V.exe"|*.blockmap) ;;
+              *) gh release delete-asset "$TAG" "$asset" -y ;;
+            esac
+          done

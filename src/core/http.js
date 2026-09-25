@@ -8,7 +8,9 @@ const { Readable, Transform } = require('stream');
 const { pipeline } = require('stream/promises');
 const { pool, sha1File } = require('./util');
 
-const USER_AGENT = 'flayniks/nimbus-launcher/1.0.0 (github.com/flayniks/the-mod)';
+const { version } = require('../../package.json');
+
+const USER_AGENT = `flayniks/nimbus-launcher/${version} (github.com/flayniks/nimbus-launcher)`;
 
 class HttpError extends Error {
   constructor(url, status, body) {
