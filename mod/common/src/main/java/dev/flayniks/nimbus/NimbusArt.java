@@ -86,6 +86,14 @@ public final class NimbusArt {
 		text(c, "LAUNCHER", x + 18, y + 9, 1, 1, MUTED, a * 0.9f);
 	}
 
+	/** The Nimbus glow and drifting particles behind a menu; `opaque` paints the dark background first. */
+	public static void menuBackdrop(Canvas c, long millis, boolean opaque) {
+		int w = c.width();
+		int h = c.height();
+		c.rect(0, 0, w, h, opaque ? argb(BG, 1f) : argb(BG, 0.78f));
+		backdrop(c, w, h, millis / 1000f, opaque ? 1f : 0.7f);
+	}
+
 	// ------------------------------------------------------------------ pieces
 
 	private static void backdrop(Canvas c, int w, int h, float t, float alpha) {
@@ -125,7 +133,7 @@ public final class NimbusArt {
 	 * An isometric cube drawn as pixel art. Each cell is classified into the top,
 	 * left or right face of the hexagon, so the look scales to any size.
 	 */
-	private static void cube(Canvas c, int cx, int cy, int size, int cell, float t, float alpha, boolean orbit) {
+	static void cube(Canvas c, int cx, int cy, int size, int cell, float t, float alpha, boolean orbit) {
 		if (orbit) orbiters(c, cx, cy, size, t, alpha, false);
 		float r3 = (float) Math.sqrt(3);
 		int half = size;
@@ -320,7 +328,7 @@ public final class NimbusArt {
 		return Math.max(lo, Math.min(hi, v));
 	}
 
-	private static float easeOutCubic(float k) {
+	static float easeOutCubic(float k) {
 		float x = 1 - k;
 		return 1 - x * x * x;
 	}

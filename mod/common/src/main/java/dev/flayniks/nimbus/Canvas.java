@@ -12,4 +12,12 @@ public interface Canvas {
 
 	/** Fills [x1, x2) x [y1, y2) with an ARGB colour. */
 	void rect(int x1, int y1, int x2, int y2, int argb);
+
+	/** Minecraft's own font; only available once the game has loaded its resources. */
+	default void text(String s, int x, int y, int argb, boolean shadow) {
+	}
+
+	default int textWidth(String s) {
+		return s.length() * 6;
+	}
 }

@@ -307,3 +307,66 @@ test('builtin: installed, re-enabled, restored, cleaned up and protected', async
   assert.equal(await builtin.ensure(paths, insts, forge), null);
   assert.equal(fs.readdirSync(path.join(paths.gameDir(forge.id), 'mods')).length, 0);
 });
+
+// ---------------------------------------------------------------- skins & capes
+
+const skins = require('../src/core/skins');
+const mock = require('./mock-services');
+
+test('skins: only 64x64 and 64x32 PNGs pass', () => {
+  assert.deepEqual(skins.checkSkin(mock.png(64, 64, () => [1, 2, 3, 255])), { width: 64, height: 64 });
+  assert.deepEqual(skins.checkSkin(mock.png(64, 32, () => [1, 2, 3, 255])), { width: 64, height: 32 });
+  assert.throws(() => skins.checkSkin(mock.png(128, 128, () => [0, 0, 0, 255])), /64×64/);
+  assert.throws(() => skins.checkSkin(Buffer.from('GIF89a not a png at all')), /not a PNG/);
+  assert.equal(skins.secureTextureUrl('http://textures.minecraft.net/texture/abc'), 'https://textures.minecraft.net/texture/abc');
+});
+
+test('skins: the wardrobe dedupes, remembers arm models and what is worn', async () => {
+  const w = new skins.Wardrobe(fs.mkdtempSync(path.join(os.tmpdir(), 'nimbus-wardrobe-')));
+  const a = mock.solid([10, 20, 30]);
+  const first = await w.add({ name: 'Blue', variant: 'classic', png: a });
+  const again = await w.add({ name: 'Blue again', variant: 'slim', png: a });
+  assert.equal(again.id, first.id, 'the same image is stored once');
+  assert.equal((await w.list())[0].variant, 'slim', 'a re-add updates the arm model');
+  await w.add({ name: 'Green', png: mock.solid([0, 200, 0]) });
+  assert.equal((await w.list()).length, 2);
+  assert.match((await w.list())[0].texture, /^data:image\/png;base64,/);
+  await w.setWorn('u1', first.id, 'https://skin/1');
+  assert.equal(await w.wornId('u1', 'https://skin/1'), first.id);
+  assert.equal(await w.wornId('u1', 'https://skin/changed-elsewhere'), null);
+  await w.remove(first.id);
+  assert.equal((await w.list()).length, 1);
+  await assert.rejects(w.get(first.id), /no longer/);
+});
+
+test('skins: upload, reset and capes go through the services API', async () => {
+  const server = await mock.start();
+  process.env.NIMBUS_SERVICES_URL = server.url;
+  try {
+    const view = await skins.describe(await skins.getProfile(server.token));
+    assert.equal(view.name, 'Tester');
+    assert.equal(view.capes.length, 2);
+    assert.equal(view.capes.find((c) => c.active).id, 'cape-1');
+    assert.match(view.skin.texture, /^data:image\/png/);
+
+    const mine = mock.png(64, 64, (x, y) => [x * 4, y * 4, 128, 255]);
+    const after = await skins.describe(await skins.uploadSkin(server.token, mine, 'slim'));
+    assert.deepEqual(server.state.uploads, [{ variant: 'SLIM', bytes: mine.length }], 'multipart upload carried the file and the arm model');
+    assert.equal(after.skin.variant, 'slim');
+    assert.equal(skins.fromDataUrl(after.skin.texture).toString('hex'), mine.toString('hex'), 'the uploaded pixels come back');
+
+    let capes = await skins.describe(await skins.showCape(server.token, 'cape-2'));
+    assert.equal(capes.capes.find((c) => c.active).id, 'cape-2');
+    capes = await skins.describe(await skins.showCape(server.token, null));
+    assert.equal(capes.capes.some((c) => c.active), false);
+
+    const reset = await skins.describe(await skins.resetSkin(server.token));
+    assert.equal(reset.skin.variant, 'classic');
+
+    await assert.rejects(skins.getProfile('wrong-token'), (err) => err.code === 'REAUTH');
+    await assert.rejects(skins.uploadSkin(server.token, mock.png(32, 32, () => [0, 0, 0, 255]), 'classic'), /64×64/);
+  } finally {
+    delete process.env.NIMBUS_SERVICES_URL;
+    await server.close();
+  }
+});

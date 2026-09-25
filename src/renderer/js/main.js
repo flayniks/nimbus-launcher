@@ -7,13 +7,16 @@ import * as boost from './pages/boost.js';
 import * as accounts from './pages/accounts.js';
 import * as settings from './pages/settings.js';
 import * as instance from './pages/instance.js';
+import * as skins from './pages/skins.js';
+import { head as skinHead } from './skinart.js';
 
-registerPages({ home, browse, boost, accounts, settings, instance });
+registerPages({ home, browse, boost, accounts, settings, instance, skins });
 
 const NAV = [
   { page: 'home', icon: 'home', label: 'Home' },
   { page: 'browse', icon: 'compass', label: 'Browse mods & packs' },
   { page: 'boost', icon: 'zap', label: 'FPS Boost' },
+  { page: 'skins', icon: 'shirt', label: 'Skins & capes' },
   { page: 'settings', icon: 'settings', label: 'Settings' },
 ];
 
@@ -106,6 +109,8 @@ function renderAccountChip() {
   if (acc) {
     const img = h('img', { src: `https://mc-heads.net/avatar/${acc.uuid}/64`, alt: acc.name });
     img.onerror = () => img.replaceWith(h('div.ph', icon('user')));
+    // draw the head from the real skin when we have it; the avatar service can lag behind a change
+    if (acc.skin) api.skins.texture(acc.skin).then((t) => skinHead(t, 64)).then((src) => { img.src = src; }).catch(() => {});
     chip.append(img, h(`i.dot${acc.needsLogin ? '.off' : ''}`));
     chip.title = acc.name;
   } else {
@@ -157,6 +162,10 @@ async function boot() {
   await Promise.all([store.refreshInstances(), store.refreshAccounts()]);
   renderAccountChip();
   store.on('accounts', renderAccountChip);
+  store.on('skin-changed', () => store.refreshAccounts().catch(() => {}));
+  // a file dropped outside a drop zone must not make the window navigate to it
+  document.addEventListener('dragover', (e) => e.preventDefault());
+  document.addEventListener('drop', (e) => e.preventDefault());
   store.on('tasks', renderTaskPill);
   store.update = await api.updates.state().catch(() => ({ state: 'idle' }));
   renderUpdatePill();

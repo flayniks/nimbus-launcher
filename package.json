@@ -1,7 +1,7 @@
 {
   "name": "nimbus-launcher",
   "productName": "Nimbus Launcher",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "A fast Minecraft: Java Edition launcher with Modrinth mods, modpacks, shaders and resource packs, every loader, every version, and a one-click FPS boost.",
   "main": "main.js",
   "license": "MIT",
@@ -21,7 +21,8 @@
     "adm-zip": "^0.6.1",
     "dompurify": "^3.4.16",
     "electron-updater": "^6.8.9",
-    "marked": "^18.0.14"
+    "marked": "^18.0.14",
+    "skinview3d": "^3.4.2"
   },
   "devDependencies": {
     "electron": "^44.4.5",
@@ -46,7 +47,12 @@
       "src/**/*",
       "build/icon.png",
       "package.json",
-      "splash-preload.js"
+      "splash-preload.js",
+      "!node_modules/three/**",
+      "!node_modules/@types/**",
+      "!node_modules/skinview-utils/**",
+      "!node_modules/skinview3d/libs/**",
+      "!node_modules/skinview3d/bundles/*.map"
     ],
     "win": {
       "target": [

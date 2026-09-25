@@ -18,6 +18,7 @@ const boost = require('./boost');
 const { readJson, writeJson, exists } = require('./util');
 const { LogParser } = require('./logparse');
 const { Builtin } = require('./builtin');
+const skins = require('./skins');
 
 const DEFAULT_SETTINGS = {
   concurrency: 16,
@@ -40,6 +41,7 @@ class Launcher extends EventEmitter {
     super();
     this.paths = createPaths(root);
     this.builtin = new Builtin(builtinDir);
+    this.wardrobe = new skins.Wardrobe(path.join(root, 'skins'));
     this.instances = new Instances(this.paths);
     this.accounts = new AccountStore(this.paths.accounts, sealer);
     this.settings = null;
@@ -233,6 +235,9 @@ class Launcher extends EventEmitter {
       inst = prep.instance;
       const modCount = await this.instances.modCount(id);
       const extraJvm = boost.launchJvmFlags({ instance: inst, javaMajor: prep.java.major, modCount });
+      // Nimbus Core's in-game Skins & Capes menu shares the launcher's wardrobe
+      extraJvm.push(`-Dnimbus.wardrobe=${this.wardrobe.dir}`);
+      if (process.env.NIMBUS_SERVICES_URL) extraJvm.push(`-Dnimbus.services=${process.env.NIMBUS_SERVICES_URL}`);
       const built = buildArguments({
         paths: this.paths, version: prep.version, install: prep.install, instance: inst, account,
         gameDir: prep.gameDir, gameAssets: prep.gameAssets, clientId: this.settings.clientToken, extraJvm,
@@ -416,6 +421,74 @@ class Launcher extends EventEmitter {
     const inst = await this.instances.update(instanceId, { boost: null, memory: null });
     return { instance: inst, restoredOptions: restored };
   }
+
+  // ---- skins & capes -----------------------------------------------------
+
+  /** What the active account wears right now, plus the capes it owns. */
+  async skinState() {
+    const session = await this.accounts.activeSession(this.oauth());
+    const view = await skins.describe(await skins.getProfile(session.accessToken));
+    await this.accounts.setSkin(session.uuid, view.skin?.url || null);
+    // the first visit saves what you already wear, so switching away is never a one-way trip
+    if (view.skin?.texture && (await this.wardrobe.list()).length === 0) {
+      const entry = await this.wardrobe.add({ name: 'My original skin', variant: view.skin.variant, png: skins.fromDataUrl(view.skin.texture), source: 'account' }).catch(() => null);
+      if (entry) await this.wardrobe.setWorn(session.uuid, entry.id, view.skin.url);
+    }
+    return { ...view, wornId: await this.wardrobe.wornId(session.uuid, view.skin?.url) };
+  }
+
+  async listWardrobe() { return this.wardrobe.list(); }
+
+  /** Wears a wardrobe skin (by id) or a fresh image, with the chosen arm model. */
+  async applySkin({ id, texture, variant, name }) {
+    const session = await this.accounts.activeSession(this.oauth());
+    let entry;
+    if (id) {
+      entry = await this.wardrobe.get(id);
+      if (variant && variant !== entry.variant) await this.wardrobe.update(id, { variant });
+    } else {
+      const added = await this.wardrobe.add({ name: name || 'Uploaded skin', variant, png: skins.fromDataUrl(texture), source: 'file' });
+      entry = await this.wardrobe.get(added.id);
+    }
+    const model = variant || entry.variant;
+    const view = await skins.describe(await skins.uploadSkin(session.accessToken, entry.png, model));
+    await this.accounts.setSkin(session.uuid, view.skin?.url || null);
+    await this.wardrobe.setWorn(session.uuid, entry.id, view.skin?.url);
+    return { ...view, wornId: entry.id };
+  }
+
+  async resetSkin() {
+    const session = await this.accounts.activeSession(this.oauth());
+    const view = await skins.describe(await skins.resetSkin(session.accessToken));
+    await this.accounts.setSkin(session.uuid, view.skin?.url || null);
+    await this.wardrobe.setWorn(session.uuid, null);
+    return { ...view, wornId: null };
+  }
+
+  async setCape(capeId) {
+    const session = await this.accounts.activeSession(this.oauth());
+    const view = await skins.describe(await skins.showCape(session.accessToken, capeId || null));
+    return { ...view, wornId: await this.wardrobe.wornId(session.uuid, view.skin?.url) };
+  }
+
+  async importSkin({ texture, name, variant, source }) {
+    await this.wardrobe.add({ name, variant, png: skins.fromDataUrl(texture), source: source || 'file' });
+    return this.wardrobe.list();
+  }
+
+  async updateSkin(id, patch) {
+    await this.wardrobe.update(id, patch);
+    return this.wardrobe.list();
+  }
+
+  async removeSkin(id) {
+    await this.wardrobe.remove(id);
+    return this.wardrobe.list();
+  }
+
+  lookupPlayerSkin(name) { return skins.lookupPlayer(name); }
+
+  skinTexture(url) { return skins.textureDataUrl(url); }
 
   // ---- misc --------------------------------------------------------------
 

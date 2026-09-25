@@ -3,7 +3,7 @@
   "id": "nimbus",
   "version": "${version}",
   "name": "Nimbus Core",
-  "description": "Built into Nimbus Launcher: the animated Nimbus loading screen and the title screen badge.",
+  "description": "Built into Nimbus Launcher: the animated Nimbus loading screen, the title screen badge and an in-game Skins & Capes menu.",
   "authors": ["flayniks"],
   "contact": { "homepage": "https://github.com/flayniks/nimbus-launcher", "sources": "https://github.com/flayniks/nimbus-launcher/tree/main/mod" },
   "license": "MIT",

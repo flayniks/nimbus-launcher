@@ -61,6 +61,15 @@ class AccountStore {
     return this.list();
   }
 
+  /** Remembers the skin an account wears, for the avatar in the sidebar. */
+  async setSkin(uuid, skin) {
+    const d = await this.load();
+    const account = d.accounts.find((a) => a.uuid === uuid);
+    if (!account || account.skin === skin) return;
+    account.skin = skin;
+    await this.save();
+  }
+
   async setActive(uuid) {
     const d = await this.load();
     if (d.accounts.some((a) => a.uuid === uuid)) d.active = uuid;

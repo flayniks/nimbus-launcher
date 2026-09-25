@@ -367,6 +367,27 @@ function registerIpc() {
   handle('boost:revert', (id) => launcher.revertBoost(id));
   handle('system:gpu', () => gpuInfo());
 
+  handle('skins:state', () => launcher.skinState());
+  handle('skins:wardrobe', () => launcher.listWardrobe());
+  handle('skins:apply', (opts) => launcher.applySkin(opts));
+  handle('skins:reset', () => launcher.resetSkin());
+  handle('skins:cape', (capeId) => launcher.setCape(capeId));
+  handle('skins:import', (opts) => launcher.importSkin(opts));
+  handle('skins:update', (id, patch) => launcher.updateSkin(id, patch));
+  handle('skins:remove', (id) => launcher.removeSkin(id));
+  handle('skins:lookup', (name) => launcher.lookupPlayerSkin(name));
+  handle('skins:texture', (url) => launcher.skinTexture(url));
+  handle('skins:pick', async () => {
+    const res = await dialog.showOpenDialog(win, {
+      title: 'Choose a skin',
+      filters: [{ name: 'Minecraft skin', extensions: ['png'] }],
+      properties: ['openFile'],
+    });
+    if (res.canceled || !res.filePaths[0]) return null;
+    const png = await require('fs').promises.readFile(res.filePaths[0]);
+    require('./src/core/skins').checkSkin(png);
+    return { name: path.basename(res.filePaths[0], '.png'), texture: `data:image/png;base64,${png.toString('base64')}` };
+  });
   handle('java:detect', () => launcher.detectJava());
   handle('java:pick', async () => {
     const res = await dialog.showOpenDialog(win, {

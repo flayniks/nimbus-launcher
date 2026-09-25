@@ -1,9 +1,17 @@
 package dev.flayniks.nimbus;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.reflect.Method;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 
 /** Canvas over 1.20–1.21.x GuiGraphics. */
 public final class GuiCanvas implements Canvas {
+	private static MethodHandle drawString;
+	private static boolean looked;
+
 	private final GuiGraphics g;
 
 	public GuiCanvas(GuiGraphics g) {
@@ -24,5 +32,46 @@ public final class GuiCanvas implements Canvas {
 	public void rect(int x1, int y1, int x2, int y2, int argb) {
 		if ((argb >>> 24) == 0 || x2 <= x1 || y2 <= y1) return;
 		g.fill(x1, y1, x2, y2, argb);
+	}
+
+	@Override
+	public void text(String s, int x, int y, int argb, boolean shadow) {
+		// below 4 alpha, older versions treat the colour as opaque
+		if ((argb >>> 24) < 4 || s.isEmpty()) return;
+		MethodHandle draw = drawString();
+		if (draw == null) return;
+		try {
+			draw.invoke(g, Minecraft.getInstance().font, s, x, y, argb, shadow);
+		} catch (Throwable ignored) {
+			// never let a label take the game down
+		}
+	}
+
+	@Override
+	public int textWidth(String s) {
+		return Minecraft.getInstance().font.width(s);
+	}
+
+	/**
+	 * drawString(Font, String, int, int, int, boolean) returns int up to 1.21.5 and void after,
+	 * so it is looked up by its parameters instead of being linked at compile time.
+	 */
+	private static MethodHandle drawString() {
+		if (!looked) {
+			looked = true;
+			for (Method m : GuiGraphics.class.getMethods()) {
+				Class<?>[] p = m.getParameterTypes();
+				if (p.length == 6 && p[0] == Font.class && p[1] == String.class && p[2] == int.class
+					&& p[3] == int.class && p[4] == int.class && p[5] == boolean.class) {
+					try {
+						drawString = MethodHandles.publicLookup().unreflect(m);
+					} catch (IllegalAccessException ignored) {
+						// leave text off
+					}
+					break;
+				}
+			}
+		}
+		return drawString;
 	}
 }

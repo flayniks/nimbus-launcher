@@ -45,6 +45,7 @@ export const icons = {
   upload: P('<path d="M12 21V9m0 0-4 4m4-4 4 4M4 7V4a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3"/>'),
   min: P('<path d="M5 12h14"/>'),
   max: P('<rect x="5" y="5" width="14" height="14" rx="1.5"/>'),
+  shirt: P('<path d="M20.4 6.6 16 4a4 4 0 0 1-8 0L3.6 6.6a1 1 0 0 0-.5 1.2l1.2 3.6a1 1 0 0 0 1.2.6L7 11.6V20a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-8.4l1.5.4a1 1 0 0 0 1.2-.6l1.2-3.6a1 1 0 0 0-.5-1.2z"/>'),
   lock: P('<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'),
   eye: P('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
   layers: P('<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>'),
