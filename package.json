@@ -30,12 +30,51 @@
     "appId": "dev.flayniks.nimbus",
     "productName": "Nimbus Launcher",
     "publish": null,
-    "directories": { "output": "dist" },
-    "files": ["main.js", "preload.js", "src/**/*", "build/icon.png", "package.json",
-      "node_modules/adm-zip/**/*", "node_modules/marked/**/*", "node_modules/dompurify/**/*"],
-    "win": { "target": "nsis", "icon": "build/icon.png" },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true },
-    "mac": { "target": "dmg", "icon": "build/icon.png", "category": "public.app-category.games" },
-    "linux": { "target": "AppImage", "icon": "build/icon.png", "category": "Game" }
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "build/icon.png",
+      "package.json",
+      "node_modules/adm-zip/**/*",
+      "node_modules/marked/**/*",
+      "node_modules/dompurify/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "Nimbus-Launcher-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Nimbus Launcher",
+      "runAfterFinish": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "build/icon.png",
+      "category": "public.app-category.games"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "build/icon.png",
+      "category": "Game"
+    }
   }
 }
