@@ -1,3 +1,6 @@
 node_modules/
 dist/
 test/.data/
+mod/*/build/
+mod/*/.gradle/
+mod/*/run/

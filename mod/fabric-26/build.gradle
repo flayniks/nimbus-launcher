@@ -1,0 +1,29 @@
+plugins {
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+}
+
+base {
+	archivesName = 'nimbus-core-fabric-26'
+}
+
+sourceSets.main {
+	java.srcDirs += '../common/src/main/java'
+	resources.srcDirs += '../common/src/main/resources'
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+}
+
+processResources {
+	def props = [version: project.version, minecraft: '>=26.1', java: '>=25', compat: 'JAVA_25']
+	inputs.properties props
+	filesMatching(['fabric.mod.json', 'nimbus.mixins.json']) {
+		expand props
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 25
+}

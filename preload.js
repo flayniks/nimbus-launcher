@@ -11,7 +11,7 @@ async function call(channel, ...args) {
   return res.data;
 }
 
-const EVENTS = new Set(['task', 'game:log', 'game:state', 'boost:step', 'win:state']);
+const EVENTS = new Set(['task', 'game:log', 'game:state', 'boost:step', 'win:state', 'update:state']);
 
 contextBridge.exposeInMainWorld('nimbus', {
   platform: process.platform,
@@ -87,6 +87,11 @@ contextBridge.exposeInMainWorld('nimbus', {
     clear: () => call('cache:clear'),
   },
   tasks: { list: () => call('tasks:list') },
+  updates: {
+    state: () => call('update:state'),
+    check: () => call('update:check'),
+    install: () => call('update:install'),
+  },
   on(event, fn) {
     if (!EVENTS.has(event)) throw new Error(`Unknown event ${event}`);
     const listener = (_e, data) => fn(data);

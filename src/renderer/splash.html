@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+  <title>Nimbus Launcher</title>
+  <link rel="stylesheet" href="css/splash.css">
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="particles" aria-hidden="true">
+      <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+    </div>
+    <div class="stage" aria-hidden="true">
+      <div class="halo"></div>
+      <div class="cube">
+        <div class="face top"></div>
+        <div class="face front"></div>
+        <div class="face right"></div>
+        <div class="face back"></div>
+        <div class="face left"></div>
+        <div class="face bottom"></div>
+      </div>
+      <div class="shadow"></div>
+    </div>
+    <div class="word" aria-label="Nimbus Launcher">
+      <span>N</span><span>I</span><span>M</span><span>B</span><span>U</span><span>S</span>
+    </div>
+    <div class="sub">LAUNCHER</div>
+    <div class="instance" id="instance">&nbsp;</div>
+    <div class="status">
+      <div class="row"><span id="stage">Getting ready</span><span id="pct"></span></div>
+      <div class="bar indeterminate" id="bar"><i id="fill"></i></div>
+    </div>
+    <div class="hint">Click to hide</div>
+  </div>
+  <script src="js/splash.js"></script>
+</body>
+</html>

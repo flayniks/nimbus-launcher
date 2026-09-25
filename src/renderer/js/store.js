@@ -10,6 +10,7 @@ export const store = {
   tasks: new Map(),
   running: new Set(),
   versions: null,
+  update: { state: 'idle' },
 
   on(event, fn) {
     if (!listeners.has(event)) listeners.set(event, new Set());
@@ -70,3 +71,8 @@ api.on('game:state', (e) => {
 
 api.on('game:log', (e) => store.emit('game-log', e));
 api.on('boost:step', (e) => store.emit('boost-step', e));
+
+api.on('update:state', (u) => {
+  store.update = u;
+  store.emit('update', u);
+});

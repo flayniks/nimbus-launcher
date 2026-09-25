@@ -8,6 +8,8 @@ A fast, good-looking launcher for **Minecraft: Java Edition** with licensed (Mic
 - **Modpacks.** Install `.mrpack` packs from Browse, or import a file you already have.
 - **FPS Boost.** One click tunes an instance for more, steadier frames (details below).
 - **Right Java, automatically.** Nimbus downloads Mojang's own Java runtime for each version (8, 16, 17, 21 or 25), so you never install Java yourself.
+- **Nimbus loading screen.** Hit Play and an animated Nimbus splash follows the launch. In Fabric and Quilt instances the game itself then loads on the Nimbus screen instead of Mojang's red one, through the built-in **Nimbus Core** mod.
+- **Updates itself.** New versions download in the background and install on restart.
 - Live game console, crash detection, play time, one-click Repair, instance duplication, update checks for installed content, and an auto-join server option.
 
 ![Home](docs/home.png)
@@ -30,12 +32,43 @@ npm test           # offline unit tests
 ### Building an installer
 
 ```bash
-npm run dist:win     # NSIS installer   -> dist/
+npm run dist:win     # NSIS installer + latest.yml update feed -> dist/
 npm run dist:mac     # .dmg
 npm run dist:linux   # AppImage
 ```
 
 Build each platform on that platform. Cross-building Windows and macOS installers only partly works.
+
+## Downloading
+
+Grab **`Nimbus-Launcher-Setup.exe`** from the newest `nimbus-v…` release on this repository's Releases page. It's a normal installer with desktop and Start menu shortcuts. It isn't code-signed, so Windows SmartScreen may say "Windows protected your PC". Click **More info → Run anyway**.
+
+Once installed, it keeps itself up to date.
+
+## Publishing an update
+
+1. On GitHub, open **Actions → Nimbus Launcher → Run workflow**.
+2. Pick **patch** (1.1.0 → 1.1.1), **minor** (→ 1.2.0) or **major** (→ 2.0.0) and press **Run workflow**.
+
+That's it. The workflow bumps the version, commits it, builds the installer on Windows, publishes a `nimbus-v…` release, and refreshes the `nimbus-latest` release that installed launchers check. Every launcher finds the update on its next start, or within four hours. It downloads in the background and shows **Update ready · Restart** in the title bar. If you don't restart, the update installs the next time the launcher closes.
+
+Pushing a change to `launcher/` also rebuilds the installer, but a launcher only updates when the version number goes up. So when you want people to get a change, use the button (or bump `version` in `launcher/package.json` yourself).
+
+Don't delete the `nimbus-latest` release: it's the update feed.
+
+## Nimbus Core and the loading screen
+
+Nimbus Core ([`mod/`](mod/README.md)) is a tiny Fabric mod that ships inside the launcher. It replaces Minecraft's red Mojang loading screen with an animated Nimbus one (pixel-art cube, drop-in lettering, particles, progress bar), and adds a Nimbus badge to the title screen.
+
+| In-game loading screen | Title screen badge | Launch splash |
+|---|---|---|
+| ![Loading screen](docs/loading-screen.png) | ![Title badge](docs/title-badge.png) | ![Splash](docs/splash.png) |
+
+- It is put into every **Fabric** and **Quilt** instance on **1.20–1.21.11** and **26.x** before each launch.
+- It shows as **Built in** in the instance's mod list, with no off switch or delete button. If someone disables or deletes the file by hand, it comes back on the next launch.
+- Forge, NeoForge, vanilla and older versions don't get it. Those still get the launcher's own animated splash while the game starts.
+
+The splash is a separate window that shows from Play until the game opens its window. It follows the downloads, Java and mod loading as they happen. Click it to hide it, or turn it off in Settings.
 
 ## FPS Boost
 
@@ -60,6 +93,7 @@ The launcher stays out of the game's way too. By default it hides itself while y
 main.js / preload.js         Electron shell, IPC, Microsoft sign-in window
 src/core/                    everything that is not UI (plain Node, testable without Electron)
   launcher.js                facade the UI talks to: tasks, prepare, launch
+  builtin.js                 keeps Nimbus Core in Fabric/Quilt instances
   versions.js                Mojang manifest, version JSON inheritance
   install.js                 libraries, natives, assets (incl. pre-1.6 and legacy virtual assets), log4j config
   java.js                    Mojang Java runtimes, system Java discovery
@@ -69,7 +103,9 @@ src/core/                    everything that is not UI (plain Node, testable wit
   auth.js / accounts.js      Microsoft → Xbox Live → Minecraft sign-in, encrypted token storage
   modrinth.js                search, dependency resolution, .mrpack, update checks
   boost.js                   the FPS Boost
-src/renderer/                the UI: vanilla JS modules, no framework
+src/renderer/                the UI: vanilla JS modules, no framework (splash.html is the launch splash)
+mod/                         Nimbus Core, the built-in Fabric mod (Gradle, see mod/README.md)
+resources/mods/              the built Nimbus Core jars the launcher ships
 ```
 
 - **Storage.** Everything lives in one folder (Settings → Storage). Libraries, assets and Java runtimes are shared between instances. Each instance has its own `minecraft` folder for worlds, mods and `options.txt`.
@@ -90,6 +126,10 @@ With `test/smoke.js`, which installs an instance for real and starts the game un
 - modpack: Fabulously Optimized (`node test/smoke.js modpack fabulously-optimized`)
 
 Every one of them started, loaded its mod loader and got as far as creating the game window. The 1.8.9, 1.12.2 and 26.x runs failed at that last step, because the headless test machine's virtual display cannot give them the display modes or OpenGL context they ask for. The rest rendered. The UI flows were exercised in the real Electron app: create an instance, browse, add a mod with its dependencies, apply the FPS Boost, launch with the live console, then stop.
+
+Nimbus Core was checked in real games on the virtual display on Fabric 1.20.1, 1.21.1, 1.21.11 and 26.3, and on Quilt 1.21.1. Each one loaded on the Nimbus screen, faded straight to the title screen with the badge, and never showed Mojang's red screen or got stuck. The variable it hides the Mojang logo with was checked in the bytecode of every release from 1.20 to 26.3.
+
+The updater was tested by having a 1.0.0 build read a local copy of the release feed, find 1.1.0, download it and verify its checksum. The final "install and restart" step only runs on Windows.
 
 The one thing that cannot be tested without a real Microsoft account is the sign-in round trip.
 

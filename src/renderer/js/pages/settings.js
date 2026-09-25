@@ -42,13 +42,43 @@ export function render(page) {
   conc.addEventListener('input', () => { concOut.textContent = conc.value; });
   conc.addEventListener('change', () => save({ concurrency: Number(conc.value) }));
 
+  const updStatus = h('span');
+  const updBtn = h('button.btn.sm', { icon: 'refresh' }, 'Check now');
+  const drawUpdate = () => {
+    const u = store.update || {};
+    const text = {
+      disabled: u.message,
+      checking: 'Checking for updates…',
+      current: 'You have the newest version.',
+      downloading: `Downloading ${u.version || 'update'} — ${Math.round(u.percent || 0)}%`,
+      ready: `Version ${u.version} is downloaded. Restart to use it.`,
+      error: `Could not check: ${u.message}`,
+    }[u.state] || 'Checks automatically every few hours.';
+    updStatus.textContent = text;
+    updBtn.replaceChildren(icon(u.state === 'ready' ? 'zap' : 'refresh'), u.state === 'ready' ? 'Restart & update' : 'Check now');
+    updBtn.classList.toggle('primary', u.state === 'ready');
+    updBtn.disabled = u.state === 'checking' || u.state === 'downloading' || u.state === 'disabled';
+  };
+  updBtn.onclick = async () => {
+    try {
+      if (store.update.state === 'ready') await api.updates.install();
+      else await api.updates.check();
+    } catch (err) { fail('Updates', err); }
+  };
+  drawUpdate();
+  const offUpdate = store.on('update', drawUpdate);
+  const version = h('b', '');
+  api.app.info().then((i) => { version.textContent = `Nimbus Launcher ${i.version}`; }).catch(() => {});
+
   const clientId = h('input.input', { value: s.msClientId || '', placeholder: 'Leave empty to use the default', onchange: () => save({ msClientId: clientId.value.trim() }) });
   const cacheOut = h('span', '…');
-  const javaList = h('div', { style: { display: 'grid', gap: '6px', minWidth: 0, width: '100%' } });
+  const javaList = h('div', { style: { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '6px', minWidth: 0, width: '100%' } });
 
   page.append(
     h('div.page-head', h('div', h('h1', 'Settings'), h('p', 'How the launcher behaves and looks.'))),
     h('div.settings-grid.stagger',
+      h('div.card',
+        h('div.setting', h('div.txt', version, updStatus), updBtn)),
       h('div.card',
         h('div.setting', h('div.txt', h('b', 'When the game starts'), h('span', 'Hiding the launcher frees memory and GPU time for Minecraft.'))),
         h('div.setting', segmented([
@@ -58,6 +88,7 @@ export function render(page) {
         ], s.onLaunch, (v) => save({ onLaunch: v })))),
       h('div.card',
         h('div.setting', h('div.txt', h('b', 'Animations'), h('span', 'Turn off for the lightest possible launcher.')), toggle(s.animations !== false, (on) => save({ animations: on }))),
+        h('div.setting', h('div.txt', h('b', 'Launch splash'), h('span', 'The animated Nimbus screen while the game starts.')), toggle(s.splash !== false, (on) => save({ splash: on }))),
         h('div.setting', h('div.txt', h('b', 'Accent colour')), swatches)),
       h('div.card',
         h('div.setting', h('div.txt', h('b', 'Parallel downloads'), h('span', 'More is faster on good connections.')), concOut),
@@ -98,5 +129,5 @@ export function render(page) {
   }
   loadCache();
   loadJava();
-  return null;
+  return offUpdate;
 }

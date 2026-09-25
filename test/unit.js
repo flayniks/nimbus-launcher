@@ -17,6 +17,7 @@ const { packLoader, modLoaders } = require('../src/core/modrinth');
 const { createPaths } = require('../src/core/paths');
 const { Instances } = require('../src/core/instances');
 const { AccountStore } = require('../src/core/accounts');
+const { Builtin, familyFor } = require('../src/core/builtin');
 
 test('maven coordinates become repository paths', () => {
   assert.equal(util.mavenPath('net.fabricmc:fabric-loader:0.16.9'), 'net/fabricmc/fabric-loader/0.16.9/fabric-loader-0.16.9.jar');
@@ -257,4 +258,52 @@ test('accounts: tokens are sealed and the active account moves on removal', asyn
   const session = await store.activeSession({});
   assert.equal(session.name, 'One');
   assert.equal(session.accessToken, 'ACCESS-SECRET-ONE');
+});
+
+test('builtin: Nimbus Core only goes where it is built for', () => {
+  const f = (loader, mcVersion) => familyFor({ loader, mcVersion });
+  assert.equal(f('fabric', '1.20.1'), 'fabric-1.20-1.21');
+  assert.equal(f('quilt', '1.21.11'), 'fabric-1.20-1.21');
+  assert.equal(f('fabric', '26.3'), 'fabric-26');
+  assert.equal(f('fabric', '26.1.2'), 'fabric-26');
+  assert.equal(f('fabric', '1.19.4'), null);
+  assert.equal(f('fabric', '24w14a'), null);
+  assert.equal(f('fabric', '26.4-snapshot-1'), null);
+  assert.equal(f('forge', '1.20.1'), null);
+  assert.equal(f('vanilla', '26.3'), null);
+});
+
+test('builtin: installed, re-enabled, restored, cleaned up and protected', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'nimbus-builtin-'));
+  const jars = path.join(root, 'jars');
+  fs.mkdirSync(jars);
+  fs.writeFileSync(path.join(jars, 'nimbus-core-fabric-1.20-1.21-1.2.0.jar'), 'new');
+  fs.writeFileSync(path.join(jars, 'nimbus-core-fabric-26-1.2.0.jar'), 'new26');
+  const paths = createPaths(path.join(root, 'data'));
+  const insts = new Instances(paths);
+  const builtin = new Builtin(jars);
+  const inst = await insts.create({ name: 'b', mcVersion: '1.21.1', loader: 'fabric' });
+  const mods = path.join(paths.gameDir(inst.id), 'mods');
+
+  // an old version, disabled, from an earlier launcher
+  fs.writeFileSync(path.join(mods, 'nimbus-core-fabric-1.20-1.21-1.0.0.jar.disabled'), 'old');
+  assert.equal(await builtin.ensure(paths, insts, inst), 'nimbus-core-fabric-1.20-1.21-1.2.0.jar');
+  assert.deepEqual(fs.readdirSync(mods).filter((f) => f.startsWith('nimbus')), ['nimbus-core-fabric-1.20-1.21-1.2.0.jar']);
+
+  // deleted by hand: comes back
+  fs.rmSync(path.join(mods, 'nimbus-core-fabric-1.20-1.21-1.2.0.jar'));
+  await builtin.ensure(paths, insts, inst);
+  assert.equal(fs.readFileSync(path.join(mods, 'nimbus-core-fabric-1.20-1.21-1.2.0.jar'), 'utf8'), 'new');
+
+  const content = await insts.listContent(inst.id);
+  assert.equal(content[0].meta.builtin, true, 'listed first');
+  assert.equal(content[0].meta.title, 'Nimbus Core');
+  await assert.rejects(insts.removeContent(inst.id, content[0].rel), /cannot be removed/);
+  await assert.rejects(insts.setContentEnabled(inst.id, content[0].rel, false), /stays on/);
+
+  // a loader that cannot run it gets none
+  const forge = await insts.create({ name: 'f', mcVersion: '1.20.1', loader: 'forge' });
+  fs.writeFileSync(path.join(paths.gameDir(forge.id), 'mods', 'nimbus-core-fabric-1.20-1.21-1.2.0.jar'), 'stray');
+  assert.equal(await builtin.ensure(paths, insts, forge), null);
+  assert.equal(fs.readdirSync(path.join(paths.gameDir(forge.id), 'mods')).length, 0);
 });

@@ -1,7 +1,7 @@
 {
   "name": "nimbus-launcher",
   "productName": "Nimbus Launcher",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A fast Minecraft: Java Edition launcher with Modrinth mods, modpacks, shaders and resource packs, every loader, every version, and a one-click FPS boost.",
   "main": "main.js",
   "license": "MIT",
@@ -20,6 +20,7 @@
   "dependencies": {
     "adm-zip": "^0.6.1",
     "dompurify": "^3.4.16",
+    "electron-updater": "^6.8.9",
     "marked": "^18.0.14"
   },
   "devDependencies": {
@@ -29,7 +30,13 @@
   "build": {
     "appId": "dev.flayniks.nimbus",
     "productName": "Nimbus Launcher",
-    "publish": null,
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://github.com/flayniks/The-mod/releases/download/nimbus-latest",
+        "channel": "latest"
+      }
+    ],
     "directories": {
       "output": "dist"
     },
@@ -39,9 +46,7 @@
       "src/**/*",
       "build/icon.png",
       "package.json",
-      "node_modules/adm-zip/**/*",
-      "node_modules/marked/**/*",
-      "node_modules/dompurify/**/*"
+      "splash-preload.js"
     ],
     "win": {
       "target": [
@@ -75,6 +80,15 @@
       "target": "AppImage",
       "icon": "build/icon.png",
       "category": "Game"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "resources/mods",
+        "to": "mods",
+        "filter": [
+          "*.jar"
+        ]
+      }
+    ]
   }
 }

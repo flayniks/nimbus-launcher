@@ -6,8 +6,10 @@ const auth = require('./src/core/auth');
 const modrinth = require('./src/core/modrinth');
 
 const DEV = process.argv.includes('--dev');
+const UPDATE_EVERY = 4 * 60 * 60 * 1000;
 let win = null;
 let launcher = null;
+let updater = null;
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -68,6 +70,123 @@ function createWindow() {
   win.on('maximize', () => send('win:state', { maximized: true }));
   win.on('unmaximize', () => send('win:state', { maximized: false }));
   win.on('closed', () => { win = null; });
+}
+
+const LOADER_NAMES = { vanilla: 'Minecraft', fabric: 'Fabric', quilt: 'Quilt', forge: 'Forge', neoforge: 'NeoForge' };
+
+/**
+ * The animated window shown from Play until the game's own window is up. It follows the
+ * install/launch task first, then the game log, and bows out when the game opens its window.
+ */
+class LaunchSplash {
+  constructor(inst, accent) {
+    this.closed = false;
+    const kind = `${LOADER_NAMES[inst.loader] || 'Minecraft'} ${inst.mcVersion}`;
+    this.inst = inst;
+    this.pending = { instance: inst.name.includes(inst.mcVersion) ? inst.name : `${inst.name} · ${kind}`, stage: 'Getting ready', progress: null, accent };
+    this.win = new BrowserWindow({
+      width: 440,
+      height: 400,
+      frame: false,
+      transparent: true,
+      resizable: false,
+      maximizable: false,
+      skipTaskbar: true,
+      focusable: false,
+      hasShadow: false,
+      show: false,
+      backgroundColor: '#00000000',
+      webPreferences: { preload: path.join(__dirname, 'splash-preload.js'), contextIsolation: true, sandbox: true },
+    });
+    this.win.setAlwaysOnTop(true, 'screen-saver');
+    this.win.loadFile(path.join(__dirname, 'src', 'renderer', 'splash.html'));
+    this.win.once('ready-to-show', () => {
+      if (this.closed) return;
+      this.win.showInactive();
+      this.update(this.pending);
+    });
+    this.win.on('closed', () => { this.closed = true; this.cleanup?.(); });
+    this.dismiss = (e) => { if (e.sender === this.win.webContents) this.close(); };
+    ipcMain.on('splash:dismiss', this.dismiss);
+  }
+
+  update(data) {
+    Object.assign(this.pending, data);
+    if (!this.closed && !this.win.webContents.isLoading()) this.win.webContents.send('splash:update', data);
+  }
+
+  /** After spawn: read the log until the game window exists, then leave. */
+  follow(instanceId, detached) {
+    this.update({ stage: 'Starting Minecraft', progress: null });
+    if (detached) { setTimeout(() => this.close(), 8000); return; }
+    const onLog = (e) => {
+      if (e.instanceId !== instanceId) return;
+      for (const line of e.lines) {
+        if (/Loading Minecraft .* with (Fabric|Quilt)/.test(line)) this.update({ stage: 'Loading mods' });
+        else if (/ModLauncher|Forge Mod Loader|FML|NeoForge/.test(line)) this.update({ stage: 'Loading Forge' });
+        // the game (or Forge's early loading window) is opening its window; give it a moment to draw
+        if (/Backend library|LWJGL Version|ImmediateWindowProvider|Created: .*atlas/i.test(line)) {
+          if (this.leaveTimer) return;
+          this.update({ stage: 'Opening the game', progress: 1 });
+          this.leaveTimer = setTimeout(() => this.close(), 2500);
+          return;
+        }
+      }
+    };
+    const onState = (e) => { if (e.instanceId === instanceId && !e.running) this.close(); };
+    launcher.on('game-log', onLog);
+    launcher.on('game-state', onState);
+    // alpha, beta and other pre-1.6 versions log almost nothing, their window shows up quickly
+    const ancient = /^(rd-|c0\.|in-|inf-|a1\.|b1\.|1\.[0-5](\.|$))/.test(this.inst.mcVersion);
+    const timer = setTimeout(() => this.close(), ancient ? 5000 : 90000);
+    this.cleanup = () => {
+      launcher.off('game-log', onLog);
+      launcher.off('game-state', onState);
+      clearTimeout(timer);
+      clearTimeout(this.leaveTimer);
+    };
+  }
+
+  close() {
+    if (this.closed) return;
+    this.closed = true;
+    this.cleanup?.();
+    ipcMain.off('splash:dismiss', this.dismiss);
+    if (this.win.isDestroyed()) return;
+    this.win.webContents.send('splash:update', { leaving: true });
+    setTimeout(() => { if (!this.win.isDestroyed()) this.win.destroy(); }, 340);
+  }
+}
+
+/**
+ * Self-updates from the rolling "nimbus-latest" GitHub release (see the workflow). The new
+ * version downloads in the background and installs when the launcher restarts or quits.
+ */
+const updates = { state: 'idle', version: null, percent: 0, message: null };
+
+function setUpdate(patch) {
+  Object.assign(updates, patch);
+  send('update:state', { ...updates, current: app.getVersion() });
+}
+
+function setupUpdater() {
+  if (!app.isPackaged || process.env.NIMBUS_NO_UPDATES) {
+    setUpdate({ state: 'disabled', message: 'Updates are only checked in the installed app.' });
+    return null;
+  }
+  const { autoUpdater } = require('electron-updater');
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.on('checking-for-update', () => setUpdate({ state: 'checking', message: null }));
+  autoUpdater.on('update-available', (info) => setUpdate({ state: 'downloading', version: info.version, percent: 0 }));
+  autoUpdater.on('update-not-available', () => setUpdate({ state: 'current', version: null }));
+  autoUpdater.on('download-progress', (p) => setUpdate({ state: 'downloading', percent: p.percent }));
+  autoUpdater.on('update-downloaded', (info) => setUpdate({ state: 'ready', version: info.version, percent: 100 }));
+  autoUpdater.on('error', (err) => setUpdate({ state: 'error', message: String(err?.message || err).split('\n')[0] }));
+  const check = () => autoUpdater.checkForUpdates().catch(() => {});
+  setTimeout(check, 8000);
+  setInterval(check, UPDATE_EVERY);
+  return autoUpdater;
 }
 
 function send(channel, payload) {
@@ -193,8 +312,25 @@ function registerIpc() {
 
   handle('game:launch', async (id) => {
     const mode = launcher.settings.onLaunch;
-    const result = await launcher.launch(id, { detach: mode === 'close' });
-    if (mode === 'close') setTimeout(() => app.quit(), 1500);
+    const inst = await launcher.instances.get(id);
+    const splash = launcher.settings.splash !== false ? new LaunchSplash(inst, launcher.settings.accent) : null;
+    const onTask = (t) => {
+      if (t.instanceId !== id || t.state !== 'running') return;
+      const progress = t.checking || !t.total ? null : t.totalBytes ? t.bytes / t.totalBytes : t.done / t.total;
+      splash?.update({ stage: t.stage, progress });
+    };
+    launcher.on('task', onTask);
+    let result;
+    try {
+      result = await launcher.launch(id, { detach: mode === 'close' });
+    } catch (err) {
+      splash?.close();
+      throw err;
+    } finally {
+      launcher.off('task', onTask);
+    }
+    splash?.follow(id, result.detached);
+    if (mode === 'close') setTimeout(() => app.quit(), splash ? 9000 : 1500);
     else if (mode === 'hide' && win) win.hide();
     return result;
   });
@@ -244,11 +380,24 @@ function registerIpc() {
   handle('cache:clear', () => launcher.clearCache());
   handle('data:open', async () => { await shell.openPath(launcher.paths.root); });
   handle('tasks:list', () => launcher.listTasks());
+  handle('update:state', () => ({ ...updates, current: app.getVersion() }));
+  handle('update:check', async () => {
+    if (!updater) throw new Error(updates.message || 'Updates are not available here.');
+    await updater.checkForUpdates();
+    return { ...updates, current: app.getVersion() };
+  });
+  handle('update:install', () => {
+    if (!updater || updates.state !== 'ready') throw new Error('No update is ready yet.');
+    if (launcher.running.size > 0) throw new Error('Close Minecraft first — the update restarts the launcher.');
+    setImmediate(() => updater.quitAndInstall(true, true));
+  });
 }
 
 app.whenReady().then(async () => {
   const root = process.env.NIMBUS_DATA_DIR || path.join(app.getPath('userData'), 'minecraft');
-  launcher = await new Launcher({ root, crypto: sealer }).init();
+  // Nimbus Core ships next to the app (extraResources) in a packaged build
+  const builtinDir = app.isPackaged ? path.join(process.resourcesPath, 'mods') : path.join(__dirname, 'resources', 'mods');
+  launcher = await new Launcher({ root, crypto: sealer, builtinDir }).init();
   launcher.on('task', (t) => send('task', t));
   launcher.on('game-log', (e) => send('game:log', e));
   launcher.on('boost-step', (e) => send('boost:step', e));
@@ -264,6 +413,7 @@ app.whenReady().then(async () => {
   });
   registerIpc();
   createWindow();
+  updater = setupUpdater();
   app.on('activate', () => { if (!win) createWindow(); });
 });
 

@@ -3,6 +3,7 @@ const fsp = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 const { readJson, writeJson, exists, slugify, pool } = require('./util');
+const { isBuiltinFile, TITLE: BUILTIN_TITLE } = require('./builtin');
 
 const CONTENT_DIRS = { mod: 'mods', resourcepack: 'resourcepacks', shader: 'shaderpacks' };
 
@@ -88,6 +89,10 @@ class Instances {
 
   async contentManifest(id) { return readJson(this.contentFile(id), {}); }
 
+  async saveContentManifest(id, manifest) {
+    await writeJson(this.contentFile(id), manifest);
+  }
+
   async recordContent(id, rel, meta) {
     const manifest = await this.contentManifest(id);
     manifest[rel] = meta;
@@ -116,10 +121,12 @@ class Instances {
         out.push({ type, file: clean, rel, enabled, size, isDir: f.isDirectory(), ...(meta ? { meta } : {}) });
       }
     }
-    return out.sort((a, b) => (a.meta?.title || a.file).localeCompare(b.meta?.title || b.file));
+    return out.sort((a, b) => (b.meta?.builtin ? 1 : 0) - (a.meta?.builtin ? 1 : 0)
+      || (a.meta?.title || a.file).localeCompare(b.meta?.title || b.file));
   }
 
   async setContentEnabled(id, rel, enabled) {
+    if (isBuiltinFile(rel)) throw new Error(`${BUILTIN_TITLE} is part of Nimbus Launcher and stays on.`);
     const abs = path.join(this.paths.gameDir(id), ...rel.split('/'));
     const from = enabled ? `${abs}.disabled` : abs;
     const to = enabled ? abs : `${abs}.disabled`;
@@ -127,6 +134,7 @@ class Instances {
   }
 
   async removeContent(id, rel) {
+    if (isBuiltinFile(rel)) throw new Error(`${BUILTIN_TITLE} is part of Nimbus Launcher and cannot be removed.`);
     const game = this.paths.gameDir(id);
     const abs = path.join(game, ...rel.split('/'));
     if (!abs.startsWith(game + path.sep)) throw new Error('Bad path');

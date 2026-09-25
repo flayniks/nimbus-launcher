@@ -97,20 +97,21 @@ export function render(page, params) {
         return;
       }
       list.forEach((item, i) => {
-        const pic = item.meta?.icon ? h('img', { src: item.meta.icon, alt: '', loading: 'lazy', decoding: 'async' }) : h('div.ph', icon(KINDS.find((k) => k.key === item.type).icon));
+        const pic = item.meta?.builtin ? h('div.ph.builtin', icon('logo'))
+          : item.meta?.icon ? h('img', { src: item.meta.icon, alt: '', loading: 'lazy', decoding: 'async' }) : h('div.ph', icon(KINDS.find((k) => k.key === item.type).icon));
         const row = h(`div.content-item${item.enabled ? '' : '.off'}`, { style: { animation: `rise .35s var(--ease) both ${Math.min(i, 15) * 22}ms` } },
           pic,
           h('div', { style: { minWidth: 0 } },
             h('div.t', item.meta?.title || item.file.replace(/\.(jar|zip)$/i, '')),
             h('div.f', [item.meta?.versionNumber, item.file, fmtBytes(item.size)].filter(Boolean).join(' · '))),
-          toggle(item.enabled, async (on) => {
+          item.meta?.builtin ? h('span.tag.accent', { title: 'Nimbus Core is part of the launcher: it gives the game the Nimbus loading screen and is always on.' }, icon('lock'), 'Built in') : toggle(item.enabled, async (on) => {
             try {
               await api.content.toggle(inst.id, item.rel, on);
               item.enabled = on;
               row.classList.toggle('off', !on);
             } catch (err) { fail('Could not change that', err); }
           }),
-          h('button.btn.ghost.icon.sm.danger', {
+          item.meta?.builtin ? h('span') : h('button.btn.ghost.icon.sm.danger', {
             icon: 'trash',
             title: 'Delete',
             onclick: async () => {

@@ -1,0 +1,31 @@
+plugins {
+	id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
+}
+
+base {
+	archivesName = 'nimbus-core-fabric-1.20-1.21'
+}
+
+sourceSets.main {
+	java.srcDirs += '../common/src/main/java'
+	resources.srcDirs += '../common/src/main/resources'
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings loom.officialMojangMappings()
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+}
+
+processResources {
+	def props = [version: project.version, minecraft: '>=1.20 <1.22', java: '>=17', compat: 'JAVA_17']
+	inputs.properties props
+	filesMatching(['fabric.mod.json', 'nimbus.mixins.json']) {
+		expand props
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	// 1.20.1 still runs on Java 17
+	it.options.release = 17
+}

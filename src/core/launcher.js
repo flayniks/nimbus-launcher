@@ -17,11 +17,13 @@ const modrinth = require('./modrinth');
 const boost = require('./boost');
 const { readJson, writeJson, exists } = require('./util');
 const { LogParser } = require('./logparse');
+const { Builtin } = require('./builtin');
 
 const DEFAULT_SETTINGS = {
   concurrency: 16,
   onLaunch: 'hide', // hide | keep | close
   animations: true,
+  splash: true,
   accent: 'violet',
   msClientId: '',
   clientToken: null,
@@ -34,9 +36,10 @@ const LOG_KEEP = 3000;
  * the 'task' event; the running game reports through 'game-log' and 'game-state'.
  */
 class Launcher extends EventEmitter {
-  constructor({ root, crypto: sealer }) {
+  constructor({ root, crypto: sealer, builtinDir = path.join(__dirname, '..', '..', 'resources', 'mods') }) {
     super();
     this.paths = createPaths(root);
+    this.builtin = new Builtin(builtinDir);
     this.instances = new Instances(this.paths);
     this.accounts = new AccountStore(this.paths.accounts, sealer);
     this.settings = null;
@@ -192,6 +195,8 @@ class Launcher extends EventEmitter {
         instance = await this.instances.update(instance.id, { versionId, loaderVersion });
       }
     }
+
+    await this.builtin.ensure(paths, this.instances, instance);
 
     stage('Downloading game files');
     const version = await resolveVersion(paths, versionId);

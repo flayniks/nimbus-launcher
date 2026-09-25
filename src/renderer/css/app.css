@@ -96,6 +96,14 @@ body.mac .winbtns { display: none; }
 .winbtns button.close:hover { background: #e5484d; color: #fff; }
 .winbtns svg { width: 14px; height: 14px; }
 
+.update-pill {
+  display: none; align-items: center; gap: 7px; height: 28px; padding: 0 12px; border-radius: 99px; cursor: pointer; font-size: 12.5px; font-weight: 600;
+  border: 1px solid color-mix(in srgb, var(--a1) 45%, transparent); background: color-mix(in srgb, var(--a1) 16%, transparent); color: var(--text);
+}
+.update-pill svg { width: 14px; height: 14px; }
+.update-pill.show { display: inline-flex; animation: pop-in 0.35s var(--ease-spring); }
+.update-pill.ready { background: var(--grad); border-color: transparent; box-shadow: var(--glow); animation: pop-in 0.35s var(--ease-spring), nudge 2.4s 1s ease-in-out infinite; }
+@keyframes nudge { 0%, 88%, 100% { transform: none; } 92% { transform: translateY(-2px); } 96% { transform: translateY(1px); } }
 .task-pill {
   display: none; align-items: center; gap: 8px; height: 28px; padding: 0 12px 0 10px; border-radius: 99px; cursor: pointer;
   border: 1px solid var(--border-2); background: var(--panel-2); font-size: 12.5px; color: var(--text-2); transition: background 0.2s, transform 0.2s var(--ease);
@@ -353,6 +361,7 @@ input[type='range']:active::-webkit-slider-thumb { transform: scale(1.2); }
 .content-item.removing { opacity: 0; transform: translateX(20px); }
 .content-item img, .content-item .ph { width: 40px; height: 40px; border-radius: 10px; object-fit: cover; background: var(--panel-2); display: grid; place-items: center; color: var(--muted); }
 .content-item .ph svg { width: 18px; height: 18px; }
+.content-item .ph.builtin { background: var(--grad); color: #fff; box-shadow: var(--glow); }
 .content-item .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .content-item .f { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -366,6 +375,8 @@ input[type='range']:active::-webkit-slider-thumb { transform: scale(1.2); }
 .setting { display: flex; align-items: center; gap: 14px; padding: 14px 16px; }
 .setting + .setting { border-top: 1px solid var(--border); }
 .setting .txt { flex: 1; }
+.setting > .seg { width: 100%; }
+.setting > .seg button { flex: 1; justify-content: center; padding: 0 8px; }
 .setting .txt b { display: block; font-size: 13.5px; }
 .setting .txt span { color: var(--muted); font-size: 12.5px; }
 .mem-readout { font-weight: 800; font-size: 22px; letter-spacing: -0.3px; }

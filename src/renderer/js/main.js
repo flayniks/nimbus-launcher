@@ -75,6 +75,28 @@ function openDock() {
   setTimeout(() => document.addEventListener('mousedown', away));
 }
 
+// ---------------------------------------------------------------- updates
+
+export async function installUpdate() {
+  if (store.update.state !== 'ready') return;
+  try {
+    await api.updates.install();
+  } catch (err) {
+    fail('Update will install later', err);
+  }
+}
+
+function renderUpdatePill() {
+  const el = document.querySelector('.update-pill');
+  const u = store.update;
+  const show = u.state === 'ready' || u.state === 'downloading';
+  el.classList.toggle('show', show);
+  el.classList.toggle('ready', u.state === 'ready');
+  el.replaceChildren(icon(u.state === 'ready' ? 'refresh' : 'download'),
+    u.state === 'ready' ? `Update ${u.version} ready · Restart` : `Downloading update ${Math.round(u.percent || 0)}%`);
+  el.title = u.state === 'ready' ? 'Restart Nimbus to finish updating' : 'A new version is downloading in the background';
+}
+
 // ---------------------------------------------------------------- shell
 
 function renderAccountChip() {
@@ -106,6 +128,7 @@ function buildShell() {
     h('header.titlebar',
       h('div.brand', h('span.mark', icon('logo')), 'Nimbus', h('small', 'Launcher')),
       h('div.spacer'),
+      h('button.update-pill.no-drag', { onclick: installUpdate }),
       pill,
       h('div.winbtns',
         h('button', { icon: 'min', title: 'Minimize', onclick: () => api.app.minimize() }),
@@ -135,6 +158,17 @@ async function boot() {
   renderAccountChip();
   store.on('accounts', renderAccountChip);
   store.on('tasks', renderTaskPill);
+  store.update = await api.updates.state().catch(() => ({ state: 'idle' }));
+  renderUpdatePill();
+  store.on('update', (u) => {
+    renderUpdatePill();
+    if (u.state === 'ready') {
+      toast('info', `Nimbus ${u.version} is ready`, 'Restart to switch to the new version, or it installs next time you close the launcher.', {
+        timeout: 0,
+        actions: [{ label: 'Restart now', run: installUpdate }],
+      });
+    }
+  });
   for (const t of await api.tasks.list()) store.tasks.set(t.id, t);
   renderTaskPill();
 
