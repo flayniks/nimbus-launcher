@@ -473,6 +473,16 @@ input[type='range']:active::-webkit-slider-thumb { transform: scale(1.2); }
 .skin-tile.add .plus { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: var(--panel-2); transition: transform 0.4s var(--ease-spring), background 0.25s; }
 .skin-tile.add .plus svg { width: 22px; height: 22px; }
 .skin-tile.add:hover .plus { transform: rotate(90deg) scale(1.08); background: var(--grad); color: #fff; }
+.skin-grid.small { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.skin-grid.small .skin-tile { padding-top: 26px; }
+.skin-grid.small .skin-tile img { width: 48px; height: 96px; }
+.skin-tile .badge.accent { background: #251c47; }
+.skin-tile .del.save:hover { background: color-mix(in srgb, var(--a1) 60%, transparent); }
+.results-note { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 110px; color: var(--muted); font-size: 13px; text-align: center; }
+.results-note.ideas { flex-wrap: wrap; gap: 8px; min-height: 90px; }
+.results-note.ideas > span { flex-basis: 100%; }
+.results-note svg { width: 16px; height: 16px; flex: none; }
+.results-note .spinner { width: 18px; height: 18px; border: 2px solid rgba(255, 255, 255, 0.15); border-top-color: var(--a2); border-radius: 50%; animation: spin 0.7s linear infinite; }
 .cape-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
 .cape-tile img, .cape-tile .nocape { width: 50px; height: 80px; image-rendering: pixelated; border-radius: 3px; }
 .cape-tile .nocape { display: grid; place-items: center; border: 1.5px dashed var(--border-2); color: var(--muted); }

@@ -8,9 +8,9 @@ Everything it draws is built from filled rectangles (a pixel-art cube, a 5×7 pi
 
 ## Skins & Capes menu
 
-The menu (`SkinsScreenBase`) changes the player's skin, arm model and cape through Mojang's skin service (`SkinApi`), using the access token the game was started with. It reads and writes the launcher's wardrobe folder, which the launcher passes in as `-Dnimbus.wardrobe=<folder>`. Without it, it falls back to `nimbus-skins/` in the game folder.
+The menu (`SkinsScreenBase`) changes the player's skin, arm model and cape through Mojang's skin service (`SkinApi`), using the access token the game was started with. Its search box looks up players by exact name (Mojang) and skins by keyword (the MineSkin gallery), with results arriving on a background thread. It reads and writes the launcher's wardrobe folder, which the launcher passes in as `-Dnimbus.wardrobe=<folder>`. Without it, it falls back to `nimbus-skins/` in the game folder.
 
-Like the loading screen, it is painted with rectangles and text only. Skins are decoded by a small PNG reader (`Png`) and drawn pixel by pixel (`SkinArt`), so the menu never touches Minecraft's texture code, which changes between versions. Vanilla buttons are still there for clicks, keyboard focus and narration, but they are not painted.
+Like the loading screen, it is painted with rectangles and text only. Skins are decoded by a small PNG reader (`Png`) and drawn pixel by pixel (`SkinArt`), so the menu never touches Minecraft's texture code, which changes between versions. Vanilla buttons and the vanilla text box are still there for clicks, typing, keyboard focus and narration, but they are not painted.
 
 ## Layout
 

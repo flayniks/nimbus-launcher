@@ -1,5 +1,6 @@
 'use strict';
-// A stand-in for api.minecraftservices.com's profile, skin and cape endpoints, for tests.
+// A stand-in for api.minecraftservices.com's profile, skin and cape endpoints, Mojang's
+// name lookup and session profiles, and the MineSkin gallery, for tests.
 const http = require('http');
 const zlib = require('zlib');
 const crypto = require('crypto');
@@ -70,7 +71,7 @@ function multipart(body, type) {
  * Starts the mock. `skins`/`capes` may be real textures; otherwise solid colours are used.
  * Returns { url, state, close() }.
  */
-function start({ token = 'mock-token', name = 'Tester', skin, capes } = {}) {
+function start({ token = 'mock-token', name = 'Tester', skin, capes, gallery, players } = {}) {
   const textures = new Map();
   const put = (buf) => {
     const id = crypto.createHash('sha1').update(buf).digest('hex');
@@ -83,6 +84,17 @@ function start({ token = 'mock-token', name = 'Tester', skin, capes } = {}) {
     capes: (capes || [png(64, 32, (x) => [200, 40 + x * 3, 60, 255]), png(64, 32, (x, y) => [30, 60 + y * 5, 200, 255])])
       .map((buf, i) => ({ id: `cape-${i + 1}`, alias: ['Migrator', 'Vanilla'][i] || `Cape ${i + 1}`, tex: put(buf), active: i === 0 })),
   };
+  // gallery: [{ name, png }]; players: { Name: { png, slim } }
+  state.gallery = (gallery || [
+    { name: 'Red knight', png: solid([200, 40, 40]) },
+    { name: 'Blue knight', png: solid([40, 60, 200]) },
+    { name: 'Green wizard', png: solid([40, 180, 60]) },
+    { name: null, png: solid([90, 90, 90]) },
+    { name: 'Red knight', png: solid([200, 40, 40]) },
+  ]).map((g, i) => ({ uuid: `g${String(i).padStart(31, '0')}`, name: g.name, texture: put(g.png) }));
+  state.players = Object.entries(players || { Notch: { png: solid([120, 80, 40]) } })
+    .map(([pname, p], i) => ({ id: `p${String(i).padStart(31, '0')}`, name: pname, slim: Boolean(p.slim), texture: put(p.png) }));
+  state.searches = [];
   let base = '';
   const profile = () => ({
     id: '00000000000000000000000000000abc',
@@ -102,6 +114,31 @@ function start({ token = 'mock-token', name = 'Tester', skin, capes } = {}) {
       if (!buf) return send(404, { error: 'not found' });
       res.writeHead(200, { 'Content-Type': 'image/png' });
       return res.end(buf);
+    }
+    const query = new URL(req.url, 'http://mock').searchParams;
+    if (req.method === 'GET' && url === '/v2/skins') {
+      const filter = (query.get('filter') || '').toLowerCase();
+      state.searches.push(filter);
+      const size = Number(query.get('size') || 16);
+      // like the real one, nameless skins sometimes match too
+      let list = state.gallery.filter((g) => !filter || !g.name || g.name.toLowerCase().includes(filter));
+      const after = query.get('after');
+      if (after) list = list.slice(list.findIndex((g) => g.uuid === after) + 1);
+      const page = list.slice(0, size);
+      const more = list.length > size;
+      return send(200, { success: true, skins: page.map((g) => ({ uuid: g.uuid, name: g.name, texture: g.texture })), pagination: { current: {}, next: more ? { after: page[page.length - 1].uuid } : {} } });
+    }
+    if (req.method === 'GET' && url.startsWith('/users/profiles/minecraft/')) {
+      const who = state.players.find((p) => p.name.toLowerCase() === decodeURIComponent(url.slice(26)).toLowerCase());
+      return who ? send(200, { id: who.id, name: who.name }) : send(404, { errorMessage: 'Couldn\'t find any profile with that name' });
+    }
+    if (req.method === 'GET' && url.startsWith('/session/minecraft/profile/')) {
+      const who = state.players.find((p) => p.id === url.slice(27));
+      if (!who) return send(204);
+      const skinInfo = { url: `${base}/texture/${who.texture}` };
+      if (who.slim) skinInfo.metadata = { model: 'slim' };
+      const value = Buffer.from(JSON.stringify({ profileId: who.id, profileName: who.name, textures: { SKIN: skinInfo } })).toString('base64');
+      return send(200, { id: who.id, name: who.name, properties: [{ name: 'textures', value }] });
     }
     if (req.headers.authorization !== `Bearer ${token}`) return send(401, { path: url, errorType: 'UNAUTHORIZED' });
     const body = await readBody(req);

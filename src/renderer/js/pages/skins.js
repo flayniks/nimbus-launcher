@@ -1,5 +1,5 @@
 /* global skinview3d */
-import { h, icon, clear, fail, ok, modal, confirmDialog, segmented, toggle } from '../ui.js';
+import { h, icon, clear, fail, ok, confirmDialog, segmented, toggle, debounce } from '../ui.js';
 import { api, store } from '../store.js';
 import { go } from '../router.js';
 import * as art from '../skinart.js';
@@ -101,7 +101,9 @@ export function render(page) {
       bar.append(...[
         h('div.row-gap', h('span.tag.accent', 'Previewing'), h('b', { style: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, p.name)),
         variantSeg,
-        h('div.row-gap', wear, h('button.btn.ghost', { onclick: () => { state.preview = null; paint(); drawBar(); drawWardrobe(); } }, 'Back to mine')),
+        h('div.row-gap', wear,
+          p.id ? null : h('button.btn', { icon: 'download', title: 'Keep it in your wardrobe without wearing it', onclick: () => saveFound(p) }, 'Save'),
+          h('button.btn.ghost', { onclick: () => { state.preview = null; paint(); drawBar(); drawWardrobe(); drawResults(); } }, 'Back to mine')),
         !state.view ? h('div.note', icon('info'), h('span', 'Sign in to wear skins. You can still collect them in your wardrobe.')) : null].filter(Boolean));
       return;
     }
@@ -109,14 +111,13 @@ export function render(page) {
     bar.append(...[
       h('div.row-gap', h('span.tag.good', icon('check'), 'Wearing'), h('b', { style: { flex: 1 } }, worn?.name || (state.view?.skin ? 'Your skin' : 'Nothing yet')),
         state.view?.skin ? h('span.tag', state.view.skin.variant === 'slim' ? 'Slim arms' : 'Classic arms') : null),
-      h('div.muted', { style: { fontSize: '12.5px' } }, 'Click a skin in your wardrobe to try it on. Drag to spin the player.'),
+      h('div.muted', { style: { fontSize: '12.5px' } }, 'Click any skin to try it on. Drag to spin the player.'),
       state.view?.skin ? h('button.btn.sm.ghost.danger', { icon: 'refresh', style: { justifySelf: 'start' }, onclick: resetSkin }, 'Reset to default skin') : null].filter(Boolean));
   }
 
   // ------------------------------------------------------------ wardrobe
   const grid = h('div.skin-grid');
   const pickBtn = h('button.btn.sm', { icon: 'upload', onclick: pickFile }, 'Upload PNG');
-  const copyBtn = h('button.btn.sm', { icon: 'users', onclick: copyFromPlayer }, 'Copy from player');
 
   async function drawWardrobe() {
     clear(grid);
@@ -149,11 +150,12 @@ export function render(page) {
   }
 
   function preview(p) {
-    if (!state.preview && state.view?.wornId === p.id) return;
+    if (!state.preview && p.id && state.view?.wornId === p.id) return;
     state.preview = p;
     paint();
     drawBar();
     drawWardrobe();
+    drawResults();
   }
 
   async function addToWardrobe({ name, texture, source }, show = true) {
@@ -171,39 +173,99 @@ export function render(page) {
     } catch (err) { fail('Could not add that skin', err); }
   }
 
-  function copyFromPlayer() {
-    const input = h('input.input', { placeholder: 'Player name, e.g. jeb_', maxlength: 16 });
-    const result = h('div', { style: { minHeight: '40px' } });
-    let found = null;
-    const save = h('button.btn.primary', { icon: 'download', disabled: true }, 'Save to wardrobe');
-    const search = async () => {
-      clear(result).appendChild(h('div.row-gap', h('i.spinner'), h('span.muted', 'Looking them up…')));
-      save.disabled = true;
-      try {
-        found = await api.skins.lookup(input.value);
-        if (!found.skin) throw new Error(`${found.name} uses a default skin.`);
-        const img = h('img', { alt: '', style: { width: '64px', height: '128px', imageRendering: 'pixelated' } });
-        art.doll(found.skin, found.variant === 'slim', 4).then((src) => { img.src = src; });
-        clear(result).appendChild(h('div.row-gap', { style: { gap: '16px' } }, img,
-          h('div', h('b', found.name), h('div.muted', { style: { fontSize: '12.5px' } }, found.variant === 'slim' ? 'Slim arms' : 'Classic arms'))));
-        save.disabled = false;
-      } catch (err) {
-        clear(result).appendChild(h('div.note', icon('alert'), h('span', err.message)));
-      }
-    };
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
-    const m = modal({
-      title: 'Copy a skin from a player',
-      size: 'narrow',
-      body: h('div.stack', h('div.row-gap', { style: { flexWrap: 'nowrap' } }, input, h('button.btn', { icon: 'search', onclick: search }, 'Find')), result),
-      footer: [h('button.btn.ghost', { onclick: () => m.close() }, 'Cancel'), save],
+  // ------------------------------------------------------------ finding skins
+  // one box for both: a player with that name comes first, then gallery skins with it in their name
+  const found = { query: '', skins: [], next: null, loading: false, error: null, gen: 0 };
+  const results = h('div.skin-grid.small');
+  const more = h('button.btn.sm.hidden', { icon: 'plus', onclick: () => runSearch(true) }, 'Show more');
+  const searchInput = h('input.input', { placeholder: 'Search skins or a player name…', maxlength: 40 });
+  const runSearchSoon = debounce(() => runSearch(false), 450);
+  searchInput.addEventListener('input', runSearchSoon);
+  searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(false); });
+
+  const IDEAS = ['knight', 'ninja', 'hoodie', 'robot', 'pirate', 'astronaut', 'creeper', 'wizard'];
+
+  async function runSearch(append) {
+    const query = searchInput.value.trim();
+    if (!append && !query) {
+      found.gen++;
+      Object.assign(found, { query: '', skins: [], next: null, loading: false, error: null });
+      drawResults();
+      return;
+    }
+    if (!append && query === found.query && found.skins.length && !found.error) return;
+    const gen = ++found.gen;
+    found.loading = true;
+    found.error = null;
+    if (!append) { found.query = query; found.skins = []; found.next = null; }
+    drawResults();
+    try {
+      const res = await api.skins.search(query, append ? found.next : null);
+      if (gen !== found.gen) return;
+      const seen = new Set(found.skins.map((x) => x.texture));
+      found.skins.push(...res.skins.filter((x) => !seen.has(x.texture)));
+      found.next = res.next;
+    } catch (err) {
+      if (gen !== found.gen) return;
+      found.error = err;
+    } finally {
+      if (gen === found.gen) { found.loading = false; drawResults(); }
+    }
+  }
+
+  async function variantOf(r) {
+    if (r.variant) return r.variant;
+    return (await art.looksSlim(r.texture).catch(() => false)) ? 'slim' : 'classic';
+  }
+
+  function drawResults() {
+    clear(results);
+    found.skins.forEach((r, i) => {
+      const img = h('img', { alt: '' });
+      variantOf(r).then((v) => art.doll(r.texture, v === 'slim', 3)).then((src) => { img.src = src; }).catch(() => {});
+      const on = state.preview && !state.preview.id && state.preview.texture === r.texture;
+      results.appendChild(h(`div.skin-tile${on ? '.on' : ''}`, {
+        style: { animation: `rise .3s var(--ease) both ${Math.min(i, 18) * 18}ms` },
+        title: r.source === 'player' ? `${r.name} is wearing this right now` : r.name,
+        onclick: async () => preview({ name: r.source === 'player' ? `${r.name}'s skin` : r.name, texture: r.texture, variant: await variantOf(r), source: r.source }),
+      },
+      r.source === 'player' ? h('span.tag.accent.badge', icon('user'), 'Player') : null,
+      h('button.del.save', {
+        icon: 'download',
+        title: 'Save to wardrobe',
+        onclick: async (e) => {
+          e.stopPropagation();
+          saveFound({ name: r.source === 'player' ? `${r.name}'s skin` : r.name, texture: r.texture, variant: await variantOf(r), source: r.source });
+        },
+      }),
+      img,
+      h('div.name', r.name)));
     });
-    save.onclick = async () => {
-      if (!found?.skin) return;
-      m.close();
-      await addToWardrobe({ name: `${found.name}'s skin`, texture: found.skin, source: 'player' }).catch((err) => fail('Could not save it', err));
-    };
-    setTimeout(() => input.focus(), 50);
+    if (found.loading) {
+      results.appendChild(h('div.results-note', h('i.spinner'), h('span', found.skins.length ? 'Loading more…' : 'Searching…')));
+    } else if (found.error) {
+      results.appendChild(h('div.results-note', icon('alert'), h('span', found.error.message)));
+    } else if (!found.query) {
+      results.appendChild(h('div.results-note.ideas', h('span', 'Type a player name to copy their skin, or try'),
+        ...IDEAS.map((word) => h('button.chip', { onclick: () => { searchInput.value = word; runSearch(false); } }, word))));
+    } else if (!found.skins.length) {
+      results.appendChild(h('div.results-note', icon('search'), h('span', `Nothing called “${found.query}”. Try another word.`)));
+    }
+    more.classList.toggle('hidden', !found.next || found.loading || Boolean(found.error));
+  }
+
+  async function saveFound(p) {
+    try {
+      state.wardrobe = await api.skins.import({ texture: p.texture, name: p.name, variant: p.variant, source: p.source || 'gallery' });
+      const entry = state.wardrobe.find((w) => w.texture === p.texture);
+      if (state.preview && !state.preview.id && state.preview.texture === p.texture && entry) {
+        state.preview = { id: entry.id, name: entry.name, texture: entry.texture, variant: p.variant };
+        drawBar();
+      }
+      await drawWardrobe();
+      drawResults();
+      ok('Saved to your wardrobe', p.name);
+    } catch (err) { fail('Could not save it', err); }
   }
 
   // ------------------------------------------------------------ capes
@@ -308,8 +370,14 @@ export function render(page) {
     h('div.skins-layout',
       h('div.card.skin-stage', stage, h('div.stage-tools', animSeg, capeSwitch), bar),
       h('div.stack',
-        h('div.card.pad', h('div.row-gap', { style: { marginBottom: '12px' } }, h('b', { style: { flex: 1 } }, 'Wardrobe'), pickBtn, copyBtn), grid),
-        h('div.card.pad', h('div.row-gap', { style: { marginBottom: '12px' } }, h('b', { style: { flex: 1 } }, 'Capes')), capeGrid))));
+        h('div.card.pad', h('div.row-gap', { style: { marginBottom: '12px' } }, h('b', { style: { flex: 1 } }, 'Wardrobe'), pickBtn), grid),
+        h('div.card.pad', h('div.row-gap', { style: { marginBottom: '12px' } }, h('b', { style: { flex: 1 } }, 'Capes')), capeGrid),
+        h('div.card.pad',
+          h('div.row-gap', { style: { marginBottom: '12px' } }, h('b', { style: { flex: 1 } }, 'Find skins'),
+            h('span.muted', { style: { fontSize: '12px' } }, 'Players by name, plus the MineSkin gallery')),
+          h('div.search', { style: { marginBottom: '12px' } }, icon('search'), searchInput),
+          results,
+          h('div.row-gap', { style: { justifyContent: 'center', marginTop: '12px' } }, more)))));
 
   // drag a skin file onto the page
   const onDrag = (e) => { e.preventDefault(); page.classList.add('dropping'); };
@@ -359,6 +427,7 @@ export function render(page) {
   }
 
   load();
+  drawResults();
   requestAnimationFrame(fit);
   return () => {
     offs.forEach((o) => o());

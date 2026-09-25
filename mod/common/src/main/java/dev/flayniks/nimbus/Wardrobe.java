@@ -61,6 +61,16 @@ public final class Wardrobe {
 		return out;
 	}
 
+	/** Whether this exact image is already in the wardrobe. */
+	public boolean has(byte[] png) {
+		String hash = sha1(png);
+		for (JsonElement e : index()) {
+			JsonObject o = e.getAsJsonObject();
+			if (o.has("hash") && hash.equals(o.get("hash").getAsString())) return true;
+		}
+		return false;
+	}
+
 	/** Adds a skin (unless the exact image is already there) and returns its id. */
 	public String add(byte[] png, String name, boolean slim) throws IOException {
 		check(png);

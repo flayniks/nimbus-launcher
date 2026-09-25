@@ -370,3 +370,36 @@ test('skins: upload, reset and capes go through the services API', async () => {
     await server.close();
   }
 });
+
+test('skins: one search finds a player by name and gallery skins by keyword', async () => {
+  const server = await mock.start({ players: { Knight: { png: mock.solid([10, 20, 30]), slim: true } } });
+  const env = { NIMBUS_MOJANG_URL: server.url, NIMBUS_GALLERY_URL: server.url, NIMBUS_TEXTURES_URL: server.url };
+  Object.assign(process.env, env);
+  try {
+    const knight = await skins.searchSkins('knight');
+    assert.deepEqual(knight.skins.map((x) => x.name), ['Knight', 'Red knight', 'Blue knight'], 'the player first, then the gallery without repeats or nameless matches');
+    assert.equal(knight.skins[0].source, 'player');
+    assert.equal(knight.skins[0].variant, 'slim');
+    assert.match(knight.skins[1].texture, /^data:image\/png;base64,/);
+    assert.equal(knight.next, null);
+
+    const wizard = await skins.searchSkins('wizard');
+    assert.deepEqual(wizard.skins.map((x) => x.name), ['Green wizard'], 'no player called wizard, so only the gallery');
+
+    const newest = await skins.searchSkins('');
+    assert.equal(newest.skins.length, 4, 'an empty search lists the newest skins, once each');
+    assert.equal(newest.skins[3].name, 'Untitled skin');
+
+    const page1 = await skins.searchGallery('', null, 2);
+    const page2 = await skins.searchGallery('', page1.next, 2);
+    const page3 = await skins.searchGallery('', page2.next, 2);
+    assert.deepEqual([...page1.skins, ...page2.skins].map((x) => x.name), ['Red knight', 'Blue knight', 'Green wizard', 'Untitled skin']);
+    assert.equal(page3.next, null);
+
+    const nobody = await skins.searchSkins('zz_nobody');
+    assert.deepEqual(nobody.skins, []);
+  } finally {
+    for (const k of Object.keys(env)) delete process.env[k];
+    await server.close();
+  }
+});

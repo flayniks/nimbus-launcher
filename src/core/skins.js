@@ -5,8 +5,12 @@ const crypto = require('crypto');
 const { request, getJson, HttpError } = require('./http');
 const { readJson, writeJson } = require('./util');
 
-// Tests point this at a local stand-in for Mojang's API.
+// Tests point these at local stand-ins.
 const services = () => process.env.NIMBUS_SERVICES_URL || 'https://api.minecraftservices.com';
+const mojang = () => process.env.NIMBUS_MOJANG_URL || 'https://api.mojang.com';
+const sessions = () => process.env.NIMBUS_MOJANG_URL || 'https://sessionserver.mojang.com';
+const gallery = () => process.env.NIMBUS_GALLERY_URL || 'https://api.mineskin.org';
+const textures = () => process.env.NIMBUS_TEXTURES_URL || 'https://textures.minecraft.net';
 
 /** Checks a PNG is a Minecraft skin (64x64, or the old 64x32) and returns its size. */
 function pngSize(buf) {
@@ -102,6 +106,7 @@ async function showCape(token, capeId) {
 }
 
 const textureCache = new Map();
+const TEXTURE_CACHE_MAX = 400;
 
 /** Downloads a skin or cape texture as a data URL, so the UI never needs to reach Mojang itself. */
 async function textureDataUrl(url) {
@@ -112,6 +117,8 @@ async function textureDataUrl(url) {
       .then(async (res) => toDataUrl(Buffer.from(await res.arrayBuffer())))
       .catch((err) => { textureCache.delete(src); throw err; });
     textureCache.set(src, job);
+    // search results pull in lots of textures: forget the oldest
+    if (textureCache.size > TEXTURE_CACHE_MAX) textureCache.delete(textureCache.keys().next().value);
   }
   return textureCache.get(src);
 }
@@ -122,14 +129,14 @@ async function lookupPlayer(name) {
   if (!/^[A-Za-z0-9_]{2,16}$/.test(clean)) throw new Error('Minecraft names are 2–16 letters, numbers or underscores.');
   let id = null;
   try {
-    const res = await request(`https://api.mojang.com/users/profiles/minecraft/${clean}`);
+    const res = await request(`${mojang()}/users/profiles/minecraft/${clean}`);
     const text = await res.text();
     id = text ? JSON.parse(text).id : null;
   } catch (err) {
     if (!(err instanceof HttpError && err.status === 404)) throw err;
   }
   if (!id) throw new Error(`No player called ${clean}.`);
-  const profile = await getJson(`https://sessionserver.mojang.com/session/minecraft/profile/${id}`);
+  const profile = await getJson(`${sessions()}/session/minecraft/profile/${id}`);
   const prop = (profile.properties || []).find((p) => p.name === 'textures');
   const textures = prop ? JSON.parse(Buffer.from(prop.value, 'base64').toString()).textures : {};
   const skin = textures.SKIN;
@@ -139,6 +146,63 @@ async function lookupPlayer(name) {
     variant: skin?.metadata?.model === 'slim' ? 'slim' : 'classic',
     skin: skin ? await textureDataUrl(skin.url) : null,
   };
+}
+
+/** Runs `fn` over `items`, at most `limit` at a time, keeping the order. */
+async function mapLimit(items, limit, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
+const PLAYER_NAME = /^[A-Za-z0-9_]{3,16}$/;
+
+/**
+ * Searches the MineSkin gallery (skins people have shared) by name; an empty
+ * query lists the newest ones. `after` continues a previous page.
+ */
+async function searchGallery(query = '', after = null, size = 24) {
+  const url = new URL(`${gallery()}/v2/skins`);
+  url.searchParams.set('size', String(size));
+  const q = String(query || '').trim().slice(0, 40);
+  if (q) url.searchParams.set('filter', q);
+  if (after) url.searchParams.set('after', after);
+  const res = await getJson(url.toString(), { timeout: 15000 });
+  // the gallery repeats textures, and nameless entries only match a search by accident
+  const seen = new Set();
+  const found = (res.skins || []).filter((sk) => /^[0-9a-f]{20,80}$/i.test(sk.texture || '')
+    && (!q || (sk.name || '').trim()) && !seen.has(sk.texture) && seen.add(sk.texture));
+  const skins = await mapLimit(found, 8, async (sk) => ({
+    id: `mineskin:${sk.uuid}`,
+    name: (sk.name || '').trim() || 'Untitled skin',
+    source: 'gallery',
+    texture: await textureDataUrl(`${textures()}/texture/${sk.texture}`).catch(() => null),
+  }));
+  return { skins: skins.filter((sk) => sk.texture), next: res.pagination?.next?.after || null };
+}
+
+/**
+ * One search box for everything: a player with that exact name (when it could be one)
+ * comes first, followed by gallery skins whose name matches.
+ */
+async function searchSkins(query = '', after = null) {
+  const q = String(query || '').trim();
+  const wantPlayer = !after && PLAYER_NAME.test(q);
+  const [player, results] = await Promise.all([
+    wantPlayer ? lookupPlayer(q).catch(() => null) : null,
+    searchGallery(q, after).catch((err) => ({ skins: [], next: null, error: err.message })),
+  ]);
+  const skins = results.skins;
+  if (player?.skin) skins.unshift({ id: `player:${player.uuid}`, name: player.name, source: 'player', variant: player.variant, texture: player.skin });
+  if (!skins.length && results.error) throw new Error(`Couldn't reach the skin gallery: ${results.error}`);
+  return { skins, next: results.next };
 }
 
 /** The UI-friendly view of a profile: what is worn now, and every cape owned. */
@@ -249,5 +313,5 @@ class Wardrobe {
 
 module.exports = {
   pngSize, checkSkin, toDataUrl, fromDataUrl, secureTextureUrl,
-  getProfile, uploadSkin, resetSkin, showCape, textureDataUrl, lookupPlayer, describe, Wardrobe,
+  getProfile, uploadSkin, resetSkin, showCape, textureDataUrl, lookupPlayer, searchGallery, searchSkins, describe, Wardrobe,
 };

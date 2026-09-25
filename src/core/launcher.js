@@ -237,7 +237,10 @@ class Launcher extends EventEmitter {
       const extraJvm = boost.launchJvmFlags({ instance: inst, javaMajor: prep.java.major, modCount });
       // Nimbus Core's in-game Skins & Capes menu shares the launcher's wardrobe
       extraJvm.push(`-Dnimbus.wardrobe=${this.wardrobe.dir}`);
-      if (process.env.NIMBUS_SERVICES_URL) extraJvm.push(`-Dnimbus.services=${process.env.NIMBUS_SERVICES_URL}`);
+      // tests swap Mojang and the gallery for local stand-ins
+      for (const [env, prop] of [['NIMBUS_SERVICES_URL', 'services'], ['NIMBUS_MOJANG_URL', 'mojang'], ['NIMBUS_GALLERY_URL', 'gallery'], ['NIMBUS_TEXTURES_URL', 'textures']]) {
+        if (process.env[env]) extraJvm.push(`-Dnimbus.${prop}=${process.env[env]}`);
+      }
       const built = buildArguments({
         paths: this.paths, version: prep.version, install: prep.install, instance: inst, account,
         gameDir: prep.gameDir, gameAssets: prep.gameAssets, clientId: this.settings.clientToken, extraJvm,
@@ -487,6 +490,8 @@ class Launcher extends EventEmitter {
   }
 
   lookupPlayerSkin(name) { return skins.lookupPlayer(name); }
+
+  searchSkins({ query, after } = {}) { return skins.searchSkins(query, after); }
 
   skinTexture(url) { return skins.textureDataUrl(url); }
 

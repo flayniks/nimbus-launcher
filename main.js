@@ -376,6 +376,7 @@ function registerIpc() {
   handle('skins:update', (id, patch) => launcher.updateSkin(id, patch));
   handle('skins:remove', (id) => launcher.removeSkin(id));
   handle('skins:lookup', (name) => launcher.lookupPlayerSkin(name));
+  handle('skins:search', (opts) => launcher.searchSkins(opts));
   handle('skins:texture', (url) => launcher.skinTexture(url));
   handle('skins:pick', async () => {
     const res = await dialog.showOpenDialog(win, {

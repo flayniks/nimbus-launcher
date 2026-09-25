@@ -9,7 +9,7 @@ A fast, good-looking launcher for **Minecraft: Java Edition** with licensed (Mic
 - **FPS Boost.** One click tunes an instance for more, steadier frames (details below).
 - **Right Java, automatically.** Nimbus downloads Mojang's own Java runtime for each version (8, 16, 17, 21 or 25), so you never install Java yourself.
 - **Nimbus loading screen.** Hit Play and an animated Nimbus splash follows the launch. In Fabric and Quilt instances the game itself then loads on the Nimbus screen instead of Mojang's red one, through the built-in **Nimbus Core** mod.
-- **Skins & capes.** Try skins on a 3D player, keep a wardrobe, copy any player's skin and switch capes, right in the launcher. In Fabric and Quilt games you can do the same from the title screen or the pause menu.
+- **Skins & capes.** Search thousands of skins or copy any player's skin by name, try them on a 3D player, keep a wardrobe and switch capes, right in the launcher. In Fabric and Quilt games you can do all of it from the title screen or the pause menu too.
 - **Updates itself.** New versions download in the background and install on restart.
 - Live game console, crash detection, play time, one-click Repair, instance duplication, update checks for installed content, and an auto-join server option.
 
@@ -62,18 +62,21 @@ Don't delete the `nimbus-latest` release: it's the update feed.
 
 The **Skins & capes** page shows your player in 3D (idle, walk, run or fly with an elytra) and changes your look for every version and server.
 
-![Skins](docs/skins.png)
+| Try it on | Find skins |
+|---|---|
+| ![Skins](docs/skins.png) | ![Skin search](docs/skin-search.png) |
 
 - **Wardrobe.** Skins you add are kept on this computer, so you can switch back and forth. The skin you had the first time you opened the page is saved in it, so changing is never a one-way trip.
-- **Add skins** by uploading a PNG, dropping one anywhere on the page, or copying any player's current skin by name.
+- **Find skins.** One search box for both: type a player's name to get the skin they wear right now, or a word like *knight* or *hoodie* to search the [MineSkin](https://mineskin.org) gallery. Click a result to try it on, then wear it or save it.
+- **Add your own** by uploading a PNG or dropping one anywhere on the page.
 - **Try before you wear.** Click a skin to preview it and pick classic or slim arms, then press *Wear this skin*.
 - **Capes.** Every cape your account owns, plus *No cape*. The preview shows it on your back.
 
-The same wardrobe is in the game. Nimbus Core adds a **Skins & Capes** button to the title screen (top right) and the pause menu (top left). There you can pick a skin, switch arms, cycle through your capes, turn the preview around and press *Wear it*. You can drop PNG files onto the game window to add them. On 1.20–1.21 *Add skin* opens a file picker; on 26.x it opens the wardrobe folder, and PNGs copied there show up by themselves.
+The same wardrobe is in the game. Nimbus Core adds a **Skins & Capes** button to the title screen (top right) and the pause menu (top left). There you can pick a skin, switch arms, cycle through your capes, turn the preview around and press *Wear it*. Its search box works like the launcher's: type a player's name or a word, click a result, and wear it (it's saved to your wardrobe too) or just *Save* it. You can drop PNG files onto the game window to add them. On 1.20–1.21 *Add skin* opens a file picker; on 26.x it opens the wardrobe folder, and PNGs copied there show up by themselves.
 
-| In the menu | In a world |
-|---|---|
-| ![In-game skins](docs/ingame-skins.png) | ![In-game skins in a world](docs/ingame-skins-world.png) |
+| In the menu | Searching by player name | In a world |
+|---|---|---|
+| ![In-game skins](docs/ingame-skins.png) | ![In-game search](docs/ingame-search.png) | ![In-game skins in a world](docs/ingame-skins-world.png) |
 
 Skins go through Mojang's own skin service with the account you're signed in with, so nothing is server-side or mod-only: everyone sees your new look the next time you join a server. Mojang allows a few changes a minute.
 
@@ -150,7 +153,7 @@ Every one of them started, loaded its mod loader and got as far as creating the 
 
 Nimbus Core was checked in real games on the virtual display on Fabric 1.20.1, 1.21.1, 1.21.11 and 26.3, and on Quilt 1.21.1. Each one loaded on the Nimbus screen, faded straight to the title screen with the badge, and never showed Mojang's red screen or got stuck. The variable it hides the Mojang logo with was checked in the bytecode of every release from 1.20 to 26.3.
 
-The skins page was tested against a stand-in for Mojang's skin service (`test/mock-services.js`): copy a player, preview, wear with slim arms, switch capes and hide the cape. The in-game menu was tested the same way on Fabric 1.20.1, 1.21.1, 1.21.11 and 26.3, from the title screen and from the pause menu in a world. Every game method the menu calls was checked to exist in each release from 1.20 to 26.3.
+The skins page was tested against stand-ins for Mojang's skin service, its name lookup and the MineSkin gallery (`test/mock-services.js`): search by player name and by keyword, save a result, preview, wear with slim arms, switch capes and hide the cape. The search was also run against the real gallery and Mojang. The in-game menu was tested the same way on Fabric 1.20.1, 1.21.1, 1.21.11 and 26.3: from the title screen and from the pause menu in a world, typing a player's name, wearing their skin, searching a keyword and saving a result. Every game method the menu calls was checked to exist in each release from 1.20 to 26.3.
 
 The updater was tested by having a 1.0.0 build read a local copy of the release feed, find 1.1.0, download it and verify its checksum. The final "install and restart" step only runs on Windows.
 

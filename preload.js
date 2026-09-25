@@ -88,6 +88,7 @@ contextBridge.exposeInMainWorld('nimbus', {
     update: (id, patch) => call('skins:update', id, patch),
     remove: (id) => call('skins:remove', id),
     lookup: (name) => call('skins:lookup', name),
+    search: (query, after) => call('skins:search', { query, after }),
     texture: (url) => call('skins:texture', url),
     pick: () => call('skins:pick'),
   },
