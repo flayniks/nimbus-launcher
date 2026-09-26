@@ -234,7 +234,7 @@ function buildShell() {
 
   app.append(
     h('header.titlebar',
-      h('div.brand', h('span.mark', icon('logo')), 'Nimbus', h('small', 'Launcher')),
+      h('div.brand', h('img.mark', { src: 'img/logo.svg', alt: '', draggable: false }), 'Nimbus', h('small', 'Launcher')),
       h('div.center', presence),
       h('div.spacer'),
       h('button.update-pill.no-drag', { onclick: installUpdate }),

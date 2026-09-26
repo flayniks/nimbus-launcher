@@ -66,7 +66,7 @@ public final class NimbusArt {
 		int cy = Math.round(h * 0.36f);
 		float intro = easeOutCubic(clamp01(t / 0.6f));
 		int bob = CUBE_MOTION ? Math.round((float) Math.sin(t * Math.PI * 2 / 2.4) * size * 0.08f) : 0;
-		cube(c, cx, cy + bob + Math.round((1 - intro) * size * 0.4f), size, cell, CUBE_MOTION ? t : 1f, alpha * intro, CUBE_MOTION);
+		logo(c, cx, cy + bob + Math.round((1 - intro) * size * 0.4f), size, cell, CUBE_MOTION ? t : 1f, alpha * intro, CUBE_MOTION);
 
 		int big = Math.max(2, Math.round(h / 72f));
 		String word = "NIMBUS";
@@ -96,14 +96,20 @@ public final class NimbusArt {
 		}
 	}
 
+	/** Where the lettering starts in a badge, after the logo and its ring. */
+	private static final int BADGE_TEXT_X = 30;
+
+	/** Width and height of a badge, for laying it out. */
+	public static int[] badgeSize() {
+		return new int[] {BADGE_TEXT_X + Math.max(textWidth("NIMBUS", 1, 1), textWidth("LAUNCHER", 1, 1)), 17};
+	}
+
 	/** The badge at any spot, fully shown (for the HUD and the inventory). */
 	public static void badgeAt(Canvas c, int x, int y, long millis) {
 		float t = millis * SPEED / 1000f;
 		float a = easeOutCubic(clamp01(t / 0.35f));
 		if (a <= 0.01f) return;
-		cube(c, x + 7, y + 8, 8, 1, t, a, false);
-		wordmark(c, "NIMBUS", x + 18, y, 1, t + 10, a);
-		text(c, "LAUNCHER", x + 18, y + 9, 1, 1, MUTED, a * 0.9f);
+		badgeArt(c, x, y, t, a);
 	}
 
 	/** The corner badge on the title screen. */
@@ -113,11 +119,13 @@ public final class NimbusArt {
 		float a = easeOutCubic(clamp01((t - 0.2f) / 0.8f));
 		if (a <= 0.01f) return;
 		int slide = Math.round((1 - a) * -8);
-		int x = 6 + slide;
-		int y = 6;
-		cube(c, x + 7, y + 8, 8, 1, t, a, false);
-		wordmark(c, "NIMBUS", x + 18, y, 1, t + 10, a);
-		text(c, "LAUNCHER", x + 18, y + 9, 1, 1, MUTED, a * 0.9f);
+		badgeArt(c, 6 + slide, 6, t, a);
+	}
+
+	private static void badgeArt(Canvas c, int x, int y, float t, float a) {
+		logo(c, x + 14, y + 8, 8, 1, t, a, CUBE_MOTION);
+		wordmark(c, "NIMBUS", x + BADGE_TEXT_X, y, 1, t + 10, a);
+		text(c, "LAUNCHER", x + BADGE_TEXT_X, y + 9, 1, 1, MUTED, a * 0.9f);
 	}
 
 	/** The Nimbus glow and drifting particles behind a menu; `opaque` paints the dark background first. */
@@ -164,12 +172,18 @@ public final class NimbusArt {
 		}
 	}
 
+	/** The Nimbus logo: the block inside its tilted halo ring, back half of the ring first. */
+	static void logo(Canvas c, int cx, int cy, int size, int cell, float t, float alpha, boolean motion) {
+		ring(c, cx, cy, size, cell, t, alpha, false, motion);
+		cube(c, cx, cy, size, cell, t, alpha);
+		ring(c, cx, cy, size, cell, t, alpha, true, motion);
+	}
+
 	/**
 	 * An isometric cube drawn as pixel art. Each cell is classified into the top,
 	 * left or right face of the hexagon, so the look scales to any size.
 	 */
-	static void cube(Canvas c, int cx, int cy, int size, int cell, float t, float alpha, boolean orbit) {
-		if (orbit) orbiters(c, cx, cy, size, t, alpha, false);
+	static void cube(Canvas c, int cx, int cy, int size, int cell, float t, float alpha) {
 		float r3 = (float) Math.sqrt(3);
 		int half = size;
 		int halfW = Math.round(size * r3 / 2f);
@@ -183,29 +197,56 @@ public final class NimbusArt {
 				int col;
 				if (v < -au / r3) {
 					float band = 1 - Math.min(1, Math.abs((u + v) - shimmer) * 3f);
-					col = mix(0xE9E3FF, WHITE, band * 0.8f);
+					col = mix(0xDDD1FF, WHITE, (-v - 0.2f) * 0.9f);
+					// the lighter diamond in the middle of the top face
+					if (au / (r3 / 2f) + Math.abs(v + 0.5f) / 0.5f <= 0.5f) col = mix(col, WHITE, 0.75f);
+					col = mix(col, WHITE, band * 0.7f);
 				} else if (u < 0) {
-					col = mix(0xB9A5FF, 0x9A7BF7, (v + 0.5f) / 1.5f);
+					col = mix(0xB69CFF, 0x7043F0, (v + 0.5f) / 1.5f);
 				} else {
-					col = mix(0x8B6CFF, 0x5F43D9, (v + 0.5f) / 1.5f);
+					col = mix(0x6D3DF0, 0x3A168F, (v + 0.5f) / 1.5f);
 				}
 				c.rect(cx + px, cy + py, cx + px + cell, cy + py + cell, argb(col, alpha));
 			}
 		}
-		if (orbit) orbiters(c, cx, cy, size, t, alpha, true);
 	}
 
-	/** Little squares circling the cube; the ones behind are drawn before it. */
-	private static void orbiters(Canvas c, int cx, int cy, int size, float t, float alpha, boolean front) {
-		for (int i = 0; i < 5; i++) {
-			double ang = t * 1.4 + i * Math.PI * 2 / 5;
-			boolean isFront = Math.sin(ang) > 0;
-			if (isFront != front) continue;
-			int x = cx + (int) Math.round(Math.cos(ang) * size * 1.7);
-			int y = cy + (int) Math.round(Math.sin(ang) * size * 0.45) + size / 4;
-			int s = isFront ? 3 : 2;
-			float a = (isFront ? 0.9f : 0.4f) * alpha;
-			c.rect(x - s / 2, y - s / 2, x - s / 2 + s, y - s / 2 + s, argb(i % 2 == 0 ? A2 : A1, a));
+	static final int RING_A = 0x22D3EE;
+	static final int RING_B = 0xA78BFA;
+	static final int RING_C = 0xF472B6;
+
+	/**
+	 * The halo: an ellipse tilted like the logo's, cyan to violet to pink, snapped to
+	 * the pixel grid. A glint runs round it while `motion` is on.
+	 */
+	private static void ring(Canvas c, int cx, int cy, int size, int cell, float t, float alpha, boolean front, boolean motion) {
+		float rx = size * 1.55f;
+		float ry = size * 0.45f;
+		int thick = Math.max(cell, Math.round(size * 0.2f / cell) * cell);
+		double tilt = Math.toRadians(-16);
+		double ct = Math.cos(tilt);
+		double st = Math.sin(tilt);
+		int oy = cy + Math.round(size * 0.1f);
+		int steps = Math.max(64, Math.round(rx * 8f / cell));
+		float glint = motion ? (t * 0.3f) % 1f : 0.62f;
+		int lastX = Integer.MIN_VALUE;
+		int lastY = Integer.MIN_VALUE;
+		for (int i = 0; i < steps; i++) {
+			double a = i * Math.PI * 2 / steps;
+			double ex = Math.cos(a) * rx;
+			double ey = Math.sin(a) * ry;
+			if ((ey > 0) != front) continue;
+			int x = cx + Math.floorDiv((int) Math.round(ex * ct - ey * st) - thick / 2, cell) * cell;
+			int y = oy + Math.floorDiv((int) Math.round(ex * st + ey * ct) - thick / 2, cell) * cell;
+			if (x == lastX && y == lastY) continue;
+			lastX = x;
+			lastY = y;
+			float along = (float) (ex / rx + 1) / 2;
+			int col = along < 0.5f ? mix(RING_A, RING_B, along * 2) : mix(RING_B, RING_C, along * 2 - 1);
+			float d = Math.abs(i / (float) steps - glint);
+			d = Math.min(d, 1 - d);
+			col = mix(col, WHITE, Math.max(0, 1 - d * 16) * 0.85f);
+			c.rect(x, y, x + thick, y + thick, argb(col, alpha * (front ? 1f : 0.8f)));
 		}
 	}
 

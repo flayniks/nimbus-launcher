@@ -4,7 +4,7 @@ The mod that ships inside Nimbus Launcher. It replaces Minecraft's red Mojang lo
 
 The launcher puts it into every Fabric and Quilt instance on Minecraft 1.20–1.21.11 and 26.x before each launch. If it gets disabled or deleted, it comes back on the next launch.
 
-Everything it draws is built from filled rectangles (a pixel-art cube, a 5×7 pixel font, particles and a progress bar). That means it works before the game has loaded a single texture or font, and on every version in range without changes.
+Everything it draws is built from filled rectangles (the pixel-art Nimbus logo, a block inside a tilted halo ring, plus a 5×7 pixel font, particles and a progress bar). That means it works before the game has loaded a single texture or font, and on every version in range without changes.
 
 ## Skins & Capes menu
 

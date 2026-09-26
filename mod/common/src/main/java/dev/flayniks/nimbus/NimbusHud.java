@@ -231,7 +231,7 @@ public final class NimbusHud {
 			@Override
 			int[] paint(Canvas c, boolean draw) {
 				if (draw) NimbusArt.badgeAt(c, 0, 0, 10_000L + System.currentTimeMillis() % 3_600_000L);
-				return new int[] {58, 16};
+				return NimbusArt.badgeSize();
 			}
 		});
 	}

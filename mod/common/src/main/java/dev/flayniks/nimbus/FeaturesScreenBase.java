@@ -128,8 +128,8 @@ public abstract class FeaturesScreenBase extends Screen {
 
 		String title = "Nimbus Features";
 		int tw = c.textWidth(title);
-		int tx = (width - tw) / 2 + 9;
-		NimbusArt.cube(c, tx - 11, 13, 8, 1, t, NimbusArt.easeOutCubic(NimbusArt.clamp01(t / 0.35f)), false);
+		int tx = (width - tw) / 2 + 13;
+		NimbusArt.logo(c, tx - 17, 12, 8, 1, t, NimbusArt.easeOutCubic(NimbusArt.clamp01(t / 0.35f)), NimbusArt.MENU_MOTION);
 		c.text(title, tx, 9, Ui.TEXT, true);
 
 		hint = tab == 0 ? "Switch HUD boxes on, then place them with Edit HUD layout"

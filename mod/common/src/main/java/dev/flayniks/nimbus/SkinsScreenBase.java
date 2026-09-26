@@ -702,8 +702,8 @@ public abstract class SkinsScreenBase extends Screen {
 		// title
 		String title = "Skins & Capes";
 		int tw = c.textWidth(title);
-		int tx = (width - tw) / 2 + 9;
-		NimbusArt.cube(c, tx - 11, 13, 8, 1, t, intro, false);
+		int tx = (width - tw) / 2 + 13;
+		NimbusArt.logo(c, tx - 17, 12, 8, 1, t, intro, NimbusArt.MENU_MOTION);
 		c.text(title, tx, 9, TEXT, true);
 		String line = status + (statusDots ? ".".repeat((int) (t * 3) % 4) : "");
 		line = fit(c, line, width - 24);

@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo.png" width="160" alt="Nimbus logo"></p>
+
 # Nimbus Launcher
 
 A fast, good-looking launcher for **Minecraft: Java Edition** with licensed (Microsoft) accounts.

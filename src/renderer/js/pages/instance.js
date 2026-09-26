@@ -139,7 +139,7 @@ export function render(page, params) {
         return;
       }
       list.forEach((item, i) => {
-        const pic = item.meta?.builtin ? h('div.ph.builtin', icon('logo'))
+        const pic = item.meta?.builtin ? h('div.ph.builtin', h('img', { src: 'img/logo.svg', alt: '' }))
           : item.meta?.icon ? h('img', { src: item.meta.icon, alt: '', loading: 'lazy', decoding: 'async' }) : h('div.ph', icon(KINDS.find((k) => k.key === item.type).icon));
         const row = h(`div.content-item${item.enabled ? '' : '.off'}`, { style: { animation: `rise .35s var(--ease) both ${Math.min(i, 15) * 22}ms` } },
           pic,
