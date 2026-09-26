@@ -94,7 +94,7 @@ class LaunchSplash {
         a1: settings.accent === 'custom' ? settings.customA1 : null,
         a2: settings.accent === 'custom' ? settings.customA2 : null,
         particles: settings.splashParticles !== false,
-        style: settings.splashStyle || 'cube',
+        style: settings.splashStyle === 'cube' ? 'spin' : settings.splashStyle || 'spin',
         still: settings.animations === false,
       },
     };

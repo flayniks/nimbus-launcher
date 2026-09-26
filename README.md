@@ -106,7 +106,7 @@ The splash is a separate window that shows from Play until the game opens its wi
 
 ## Nimbus Features (in game)
 
-In Fabric and Quilt games, **Nimbus Features** sits on the left of the pause menu and at the top of the title screen, and Right Shift opens it anywhere in game.
+In Fabric and Quilt games, **Nimbus Features** sits on the left of the pause menu and in the top-left corner of the title screen (under the Nimbus badge, clear of the Minecraft logo; on a narrow screen it becomes a small icon button), and Right Shift opens it anywhere in game.
 
 | The menu | Editing the HUD | In a world |
 |---|---|---|
@@ -126,8 +126,8 @@ Settings has an **Appearance** section and an **Animations** section.
 
 - **Appearance:** theme (Midnight, Void, Nebula, Ocean, Forest, Ember), accent colour (six presets or two colours of your own), background (Aurora, Starfield, Neon grid, Plain or your own picture with blur and darken), glass and how frosted it is, card style, corners, UI size (90–125%) and sidebar labels.
 - **Animations in the launcher:** on/off, speed, how pages change (rise, fade, slide, zoom or none), lists sliding in, what cards do on hover (lift, tilt, glow or nothing) and the moving background.
-- **Launch splash:** on/off, cube or minimal style, and particles.
-- **In the game** (through Nimbus Core): the Nimbus loading screen (off shows Mojang's), particles, the spinning cube, animation speed, the title screen badge and the moving glow behind the Nimbus menus.
+- **Launch splash:** on/off, particles, and how the logo moves: **Spin**, **Bounce** (hops with squash and stretch), **Splash** (drops in and lands in rippling water), **Pulse** (beats and sends out waves), **Flip**, **Still** or **Minimal** (just the name). Every choice has a live preview card.
+- **In the game** (through Nimbus Core): the Nimbus loading screen (off shows Mojang's), particles, animation speed, the title screen badge, the moving glow behind the Nimbus menus, and the same logo styles picked separately for **when the game starts** and **when resource packs load** (F3+T, or changing packs in game).
 
 ## Player counter
 
@@ -198,7 +198,7 @@ Nimbus Core was checked in real games on the virtual display on Fabric 1.20.1, 1
 
 The skins page was tested against stand-ins for Mojang's skin service, its name lookup and the MineSkin gallery (`test/mock-services.js`): search by player name and by keyword, save a result, preview, wear with slim arms, switch capes and hide the cape. The search was also run against the real gallery and Mojang. The in-game menu was tested the same way on Fabric 1.20.1, 1.21.1, 1.21.11 and 26.3: from the title screen and from the pause menu in a world, typing a player's name, wearing their skin, searching a keyword and saving a result. Every game method the menu calls was checked to exist in each release from 1.20 to 26.3.
 
-Nimbus Features was tested in real games on Fabric 1.20.1, 1.21.1, 1.21.11 and 26.3: opening the menu from the pause menu, the title screen and Right Shift, switching HUD boxes on, dragging and resizing them in the editor, zoom and the inventory watermark. The in-game animation switches were checked on 1.21.1 (Mojang's loading screen, no badge) and 26.3 (still cube, no particles). The launcher's look (themes, backgrounds, your own picture and colours, shapes, size), the animation settings, the player counter (against a stand-in counter) and the *Add file* buttons were run through in the real Electron app.
+Nimbus Features was tested in real games on Fabric 1.20.1, 1.21.1, 1.21.11 and 26.3: opening the menu from the pause menu, the title screen and Right Shift, switching HUD boxes on, dragging and resizing them in the editor, zoom and the inventory watermark. The in-game animation options were checked on 1.21.1 (Mojang's loading screen, no badge, flip) and on 26.1.2 and 26.3 (still logo, no particles, bounce and pulse at start, splash on an F3+T resource reload, which now fades straight back into the world). The inventory watermark was checked on 1.21.1 and 26.1.2. The launcher's look (themes, backgrounds, your own picture and colours, shapes, size), the animation settings, the player counter (against a stand-in counter) and the *Add file* buttons were run through in the real Electron app.
 
 The updater was tested by having a 1.0.0 build read a local copy of the release feed, find 1.1.0, download it and verify its checksum. The final "install and restart" step only runs on Windows.
 

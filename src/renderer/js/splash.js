@@ -67,7 +67,7 @@
       if (u.look.a1) root.style.setProperty('--a1', u.look.a1);
       if (u.look.a2) root.style.setProperty('--a2', u.look.a2);
       root.dataset.particles = u.look.particles ? 'on' : 'off';
-      root.dataset.style = u.look.style || 'cube';
+      root.dataset.style = !u.look.style || u.look.style === 'cube' ? 'spin' : u.look.style;
       document.body.classList.toggle('still', Boolean(u.look.still));
     }
     if (u.instance) $('instance').textContent = u.instance;

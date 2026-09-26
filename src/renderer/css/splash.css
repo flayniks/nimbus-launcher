@@ -121,3 +121,77 @@ body { display: grid; place-items: center; font: 13px/1.4 'Inter', 'Segoe UI Var
 :root[data-style='minimal'] .sub { margin-bottom: 18px; }
 :root[data-style='minimal'] .instance { font-size: 15px; }
 body.still *, body.still *::before, body.still *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+
+/* ---- animation styles (Settings → Animations → Launch splash) ---- */
+.ripple, .drops { display: none; }
+.ripple { position: absolute; left: 50%; bottom: 2px; width: 70px; height: 18px; margin-left: -35px; border-radius: 50%; border: 2px solid var(--a2); opacity: 0; pointer-events: none; }
+.drops { position: absolute; left: 50%; bottom: 10px; width: 0; height: 0; }
+.drops i { position: absolute; width: 4px; height: 4px; border-radius: 1px; background: var(--a2); opacity: 0; }
+.drops i:nth-child(odd) { background: #22d3ee; }
+.drops i:nth-child(3n) { background: #fff; }
+
+/* bounce: hops with squash and stretch, turning slowly */
+:root[data-style='bounce'] .scene { animation: hop 0.9s infinite; }
+:root[data-style='bounce'] .cube { animation-duration: 9s; }
+@keyframes hop {
+  0% { translate: 0 10px; scale: 1.16 0.84; animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1); }
+  14% { translate: 0 2px; scale: 0.92 1.1; animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1); }
+  50% { translate: 0 -34px; scale: 1 1; animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.3); }
+  90% { translate: 0 6px; scale: 0.95 1.06; }
+  100% { translate: 0 10px; scale: 1.16 0.84; }
+}
+:root[data-style='bounce'] .shadow { animation: hop-shadow 0.9s infinite; }
+@keyframes hop-shadow { 0%, 100% { transform: scale(1.2); opacity: 0.6; } 50% { transform: scale(0.5); opacity: 0.2; animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.3); } }
+
+/* splash: drops in from above and lands in water, which keeps rippling */
+:root[data-style='splash'] .scene { animation: drop 0.85s cubic-bezier(0.55, 0, 1, 0.45) both, bob 2.4s 1.4s ease-in-out infinite; }
+@keyframes drop {
+  0% { translate: 0 -190px; scale: 0.9 1.15; opacity: 0; }
+  25% { opacity: 1; }
+  78% { translate: 0 10px; scale: 1.22 0.76; animation-timing-function: ease-out; }
+  90% { translate: 0 -4px; scale: 0.94 1.08; }
+  100% { translate: 0 0; scale: 1 1; }
+}
+:root[data-style='splash'] .ripple { display: block; animation: ripple 2.4s 0.66s ease-out infinite; }
+:root[data-style='splash'] .ripple.r2 { animation-delay: 0.9s; }
+:root[data-style='splash'] .ripple.r3 { animation-delay: 1.14s; }
+@keyframes ripple { 0% { transform: scale(0.5); opacity: 0.9; } 70%, 100% { transform: scale(3.4); opacity: 0; } }
+:root[data-style='splash'] .drops { display: block; }
+:root[data-style='splash'] .drops i { animation: spray 0.9s 0.66s cubic-bezier(0.2, 0.6, 0.4, 1) both; }
+.drops i:nth-child(1) { --dx: -70px; --dy: -46px; }
+.drops i:nth-child(2) { --dx: -44px; --dy: -70px; }
+.drops i:nth-child(3) { --dx: -18px; --dy: -84px; }
+.drops i:nth-child(4) { --dx: 12px; --dy: -78px; }
+.drops i:nth-child(5) { --dx: 40px; --dy: -66px; }
+.drops i:nth-child(6) { --dx: 68px; --dy: -44px; }
+.drops i:nth-child(7) { --dx: -86px; --dy: -22px; }
+.drops i:nth-child(8) { --dx: 88px; --dy: -24px; }
+@keyframes spray {
+  0% { transform: translate(0, 0); opacity: 1; }
+  55% { transform: translate(calc(var(--dx) * 0.7), var(--dy)); opacity: 1; }
+  100% { transform: translate(var(--dx), 20px) scale(0.4); opacity: 0; }
+}
+
+/* pulse: beats like a heart and sends out waves */
+:root[data-style='pulse'] .scene { animation: beat 1.3s ease-in-out infinite; }
+:root[data-style='pulse'] .cube { animation-duration: 12s; }
+@keyframes beat { 0%, 45%, 100% { scale: 1; } 10% { scale: 1.17; } 22% { scale: 0.97; } 32% { scale: 1.1; } }
+:root[data-style='pulse'] .halo { animation: beat-glow 1.3s ease-in-out infinite; }
+@keyframes beat-glow { 0%, 45%, 100% { transform: scale(0.9); opacity: 0.6; } 10%, 32% { transform: scale(1.12); opacity: 1; } }
+:root[data-style='pulse'] .ripple { display: block; top: 50%; bottom: auto; height: 70px; margin-top: -35px; border-color: var(--a1); animation: wave 1.3s ease-out infinite; }
+:root[data-style='pulse'] .ripple.r2 { animation-delay: 0.3s; border-color: var(--a2); }
+:root[data-style='pulse'] .ripple.r3 { display: none; }
+@keyframes wave { 0% { transform: scale(0.7); opacity: 0.8; } 100% { transform: scale(2.4); opacity: 0; } }
+
+/* flip: a little jump and a somersault every couple of seconds */
+:root[data-style='flip'] .cube { animation: flip 2.2s cubic-bezier(0.6, -0.25, 0.3, 1.25) infinite; }
+@keyframes flip { 0%, 30% { transform: rotateX(-28deg) rotateY(40deg) rotateX(0deg); } 70%, 100% { transform: rotateX(-28deg) rotateY(40deg) rotateX(-360deg); } }
+:root[data-style='flip'] .scene { animation: flip-hop 2.2s ease-in-out infinite; }
+@keyframes flip-hop { 0%, 28%, 72%, 100% { translate: 0 0; } 50% { translate: 0 -26px; } }
+:root[data-style='flip'] .shadow { animation: flip-shadow 2.2s ease-in-out infinite; }
+@keyframes flip-shadow { 0%, 28%, 72%, 100% { transform: scale(1.1); opacity: 0.55; } 50% { transform: scale(0.7); opacity: 0.3; } }
+
+/* still: the logo, not moving */
+:root[data-style='still'] .scene, :root[data-style='still'] .ring, :root[data-style='still'] .shadow, :root[data-style='still'] .spark { animation: none; }
+:root[data-style='still'] .cube { animation: none; transform: rotateX(-28deg) rotateY(40deg); }
+:root[data-style='still'] .ring { transform: translateY(6px) rotateZ(-16deg) rotateX(64deg); }

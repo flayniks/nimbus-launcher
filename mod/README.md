@@ -20,7 +20,9 @@ Right Shift opens the menu and C zooms. On 26.3, which reads keys through SDL, t
 
 ## Animation options
 
-The launcher passes *Settings → Animations* in as system properties: `nimbus.anim.loading`, `particles`, `cube`, `badge`, `menus` (each `true`/`false`) and `nimbus.anim.speed` (a multiplier). With `loading=false` every loading-screen hook steps aside and Mojang's screen shows as usual.
+The launcher passes *Settings → Animations* in as system properties: `nimbus.anim.loading`, `particles`, `badge`, `menus` (each `true`/`false`), `nimbus.anim.speed` (a multiplier), and `nimbus.anim.style` / `nimbus.anim.reloadStyle` (`spin`, `bounce`, `splash`, `pulse`, `flip` or `still`) for the logo while the game starts and while resource packs reload. With `loading=false` every loading-screen hook steps aside and Mojang's screen shows as usual.
+
+The loading screen times its fades with vanilla's `Util.getMillis()`, never `System.nanoTime()`: on 26.x the two clocks differ, and mixing them made the Nimbus screen vanish (and Mojang's logo flash) when loading finished.
 
 ## Layout
 

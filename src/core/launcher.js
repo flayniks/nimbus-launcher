@@ -53,11 +53,13 @@ const DEFAULT_SETTINGS = {
   bgMotion: true,
   // animations: launch splash
   splashParticles: true,
-  splashStyle: 'cube', // cube | minimal
+  splashStyle: 'spin', // spin | bounce | splash | pulse | flip | still | minimal
   // animations: in game (Nimbus Core)
   gameLoading: true,
   gameParticles: true,
-  gameCube: true,
+  gameCube: true, // before 1.4.2: off meant a still logo
+  gameStyle: 'spin', // how the logo moves while the game starts: spin | bounce | splash | pulse | flip | still
+  reloadStyle: 'spin', // the same, while resource packs load in game
   gameAnimSpeed: 'normal', // relaxed | normal | snappy
   gameBadge: true,
   gameMenuMotion: true,
@@ -284,7 +286,8 @@ class Launcher extends EventEmitter {
       const anim = {
         loading: st.gameLoading !== false,
         particles: st.gameParticles !== false,
-        cube: st.gameCube !== false,
+        style: st.gameStyle || (st.gameCube === false ? 'still' : 'spin'),
+        reloadStyle: st.reloadStyle || st.gameStyle || 'spin',
         badge: st.gameBadge !== false,
         menus: st.gameMenuMotion !== false,
         speed: { relaxed: 0.6, normal: 1, snappy: 1.6 }[st.gameAnimSpeed] || 1,

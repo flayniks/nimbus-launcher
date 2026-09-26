@@ -204,3 +204,41 @@
 .setting > .txt + .seg { width: auto; flex: none; }
 .setting > .txt + .seg button { flex: none; padding: 0 14px; }
 @media (max-width: 1000px) { .setting:has(> .txt + .seg) { flex-wrap: wrap; } }
+
+/* animation style cards: each plays its own animation in a little preview */
+.settings-section .sub-title { margin: 4px 0 -6px; font-size: 13px; font-weight: 700; color: var(--text-2); }
+.anim-grid { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
+.anim-grid .choice small { display: block; margin-top: 2px; color: var(--muted); font-weight: 500; font-size: 11.5px; line-height: 1.3; }
+.anim-pv { height: 74px !important; display: grid; place-items: center; perspective: 300px; background: radial-gradient(circle at 50% 55%, color-mix(in srgb, var(--a1) 24%, transparent), transparent 70%), rgba(0, 0, 0, 0.28); }
+.anim-pv img { width: 60px; height: auto; pointer-events: none; }
+.anim-pv .pv-ripple { position: absolute; left: 50%; bottom: 10px; width: 44px; height: 11px; margin-left: -22px; border-radius: 50%; border: 2px solid var(--a2); opacity: 0; display: none; pointer-events: none; }
+.pv-word { font-weight: 900; font-size: 17px; letter-spacing: 3px; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.pv-spin img { animation: pv-spin 2.6s linear infinite; }
+@keyframes pv-spin { from { transform: rotateY(0deg); } to { transform: rotateY(360deg); } }
+.pv-bounce img { animation: pv-hop 0.9s infinite; }
+@keyframes pv-hop {
+  0% { transform: translateY(12px) scale(1.15, 0.85); animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1); }
+  14% { transform: translateY(6px) scale(0.93, 1.08); animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1); }
+  50% { transform: translateY(-14px); animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.3); }
+  100% { transform: translateY(12px) scale(1.15, 0.85); }
+}
+.pv-splash img { animation: pv-drop 2.4s infinite; }
+@keyframes pv-drop {
+  0% { transform: translateY(-70px); opacity: 0; animation-timing-function: cubic-bezier(0.55, 0, 1, 0.45); }
+  8% { opacity: 1; }
+  30% { transform: translateY(8px) scale(1.2, 0.8); animation-timing-function: ease-out; }
+  38% { transform: translateY(-2px) scale(0.95, 1.05); }
+  46%, 88% { transform: none; opacity: 1; }
+  100% { transform: none; opacity: 0; }
+}
+.pv-splash .pv-ripple { display: block; animation: pv-ripple 2.4s 0.72s ease-out infinite; }
+.pv-splash .pv-ripple.r2 { animation-delay: 0.95s; }
+@keyframes pv-ripple { 0% { transform: scale(0.5); opacity: 0.9; } 45%, 100% { transform: scale(2.6); opacity: 0; } }
+.pv-pulse img { animation: pv-beat 1.3s ease-in-out infinite; }
+@keyframes pv-beat { 0%, 45%, 100% { transform: scale(1); } 10% { transform: scale(1.18); } 22% { transform: scale(0.97); } 32% { transform: scale(1.1); } }
+.pv-pulse .pv-ripple { display: block; top: 50%; bottom: auto; width: 50px; height: 50px; margin: -25px 0 0 -25px; border-color: var(--a1); animation: pv-wave 1.3s ease-out infinite; }
+.pv-pulse .pv-ripple.r2 { animation-delay: 0.3s; border-color: var(--a2); }
+@keyframes pv-wave { 0% { transform: scale(0.6); opacity: 0.8; } 100% { transform: scale(1.9); opacity: 0; } }
+.pv-flip img { animation: pv-flip 2.2s cubic-bezier(0.6, -0.25, 0.3, 1.25) infinite; }
+@keyframes pv-flip { 0%, 30% { transform: translateY(0) rotateX(0deg); } 50% { transform: translateY(-12px) rotateX(-180deg); } 70%, 100% { transform: translateY(0) rotateX(-360deg); } }
+body.no-anim .anim-pv * { animation: none !important; }

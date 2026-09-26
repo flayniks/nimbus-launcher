@@ -4,6 +4,7 @@ import dev.flayniks.nimbus.GuiCanvas;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import dev.flayniks.nimbus.NimbusArt;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.util.Util;
 import net.minecraft.client.gui.screens.LoadingOverlay;
 import net.minecraft.server.packs.resources.ReloadInstance;
 import org.spongepowered.asm.mixin.Final;
@@ -60,8 +61,8 @@ public abstract class LoadingOverlayMixin {
 	private void nimbus$draw(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick, CallbackInfo ci) {
 		// Settings → Animations → "Nimbus loading screen" off: leave Mojang\'s screen alone
 		if (!NimbusArt.LOADING) return;
-		// vanilla's Util.getMillis() is System.nanoTime() in milliseconds
-		long now = System.nanoTime() / 1_000_000L;
+		// vanilla's own clock: on 26.x it is not System.nanoTime(), and the fade times are on it
+		long now = Util.getMillis();
 		if (nimbus$born < 0) nimbus$born = now;
 		float out = fadeOutStart > -1L ? (now - fadeOutStart) / 1000f : -1f;
 		float in = fadeInStart > -1L ? (now - fadeInStart) / 500f : -1f;
@@ -83,6 +84,6 @@ public abstract class LoadingOverlayMixin {
 		boolean stuckOut = fadeOutStart > -1L && now - fadeOutStart > 5000L;
 		boolean stuckIn = fadeIn && fadeOutStart == -1L && fadeInStart > -1L && now - fadeInStart > 5000L && reload.isDone();
 		if (!nimbus$safeMode && (stuckOut || stuckIn)) nimbus$safeMode = true;
-		NimbusArt.loading(new GuiCanvas(graphics), currentProgress, alpha, bar, opaque, now - nimbus$born);
+		NimbusArt.loading(new GuiCanvas(graphics), currentProgress, alpha, bar, opaque, now - nimbus$born, fadeIn);
 	}
 }

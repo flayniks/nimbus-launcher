@@ -39,6 +39,16 @@ const SECTIONS = [
 
 const SPEEDS = [['relaxed', 'Relaxed'], ['normal', 'Normal'], ['snappy', 'Snappy']];
 
+/** How the Nimbus logo moves: on the launch splash, while the game starts, and while resource packs load. */
+const LOGO_STYLES = [
+  ['spin', 'Spin', 'Turns round and round'],
+  ['bounce', 'Bounce', 'Hops up and down'],
+  ['splash', 'Splash', 'Drops in and lands in water'],
+  ['pulse', 'Pulse', 'Beats and sends out waves'],
+  ['flip', 'Flip', 'Jumps and flips over'],
+  ['still', 'Still', 'Stays put'],
+];
+
 let lastSection = 'general';
 
 export function render(page) {
@@ -63,6 +73,26 @@ export function render(page) {
     input.addEventListener('input', () => { out.textContent = `${input.value}${unit}`; live?.(Number(input.value)); });
     input.addEventListener('change', () => save({ [key]: Number(input.value) }));
     return h('div.range-row', { style: { width: '260px', maxWidth: '100%' } }, input, out);
+  };
+
+  /** Cards with a little live preview of each animation style. */
+  const stylePicker = (key, fallback, extra = []) => {
+    const grid = h('div.choice-grid.anim-grid');
+    const draw = () => {
+      clear(grid);
+      const current = s()[key] === 'cube' ? 'spin' : s()[key] || fallback;
+      for (const [id, name, desc] of [...LOGO_STYLES, ...extra]) {
+        const b = h(`button.choice${current === id ? '.on' : ''}`, { title: desc, onclick: async () => { await save({ [key]: id }); draw(); } },
+          h(`div.swatch.anim-pv.pv-${id}`,
+            id === 'minimal' ? h('b.pv-word', 'NIMBUS') : h('img', { src: 'img/logo.svg', alt: '', draggable: false }),
+            h('i.pv-ripple'), h('i.pv-ripple.r2'), h('span.check', icon('check'))),
+          h('span', name, h('small', desc)));
+        b.dataset.style = id;
+        grid.appendChild(b);
+      }
+    };
+    draw();
+    return grid;
   };
 
   let offUpdate = () => {};
@@ -262,16 +292,20 @@ export function render(page) {
       h('div.group-title', 'Launch splash'),
       card(
         row('Show the splash', 'The animated Nimbus window from Play until the game opens.', onOff('splash')),
-        row('Style', null, seg('splashStyle', [['cube', 'Cube'], ['minimal', 'Minimal']], 'cube')),
         row('Particles', 'Sparks rising behind it.', onOff('splashParticles'))),
+      h('div.sub-title', 'How the logo moves'),
+      stylePicker('splashStyle', 'spin', [['minimal', 'Minimal', 'Just the name, no logo']]),
       h('div.group-title', 'In the game'),
       card(
         row('Nimbus loading screen', 'Off shows the normal Mojang loading screen instead.', onOff('gameLoading')),
         row('Particles', 'Sparks on the loading screen and behind the Nimbus menus.', onOff('gameParticles')),
-        row('Spinning cube', 'The Nimbus cube turns on the loading screen.', onOff('gameCube')),
         row('Speed', null, seg('gameAnimSpeed', SPEEDS, 'normal')),
         row('Title screen badge', 'The Nimbus badge in the corner of the title screen.', onOff('gameBadge')),
         row('Moving menus', 'The drifting glow behind Skins & Capes and Nimbus Features.', onOff('gameMenuMotion'))),
+      h('div.sub-title', 'When the game starts'),
+      stylePicker('gameStyle', s().gameCube === false ? 'still' : 'spin'),
+      h('div.sub-title', 'When resource packs load'),
+      stylePicker('reloadStyle', 'spin'),
       h('div.muted', { style: { fontSize: '12.5px', display: 'flex', gap: '8px', alignItems: 'center' } }, icon('info'),
         'In-game options are for Fabric and Quilt instances (through Nimbus Core) and apply the next time the game starts.'));
   }

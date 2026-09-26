@@ -24,10 +24,20 @@ public final class NimbusArt {
 	/** Settings → Animations in the launcher, passed in as -Dnimbus.anim.* when the game starts. */
 	public static final boolean LOADING = flag("loading");
 	static final boolean PARTICLES = flag("particles");
-	static final boolean CUBE_MOTION = flag("cube");
+	/** Animation styles for the logo on the loading screen. */
+	static final java.util.List<String> STYLES = java.util.List.of("spin", "bounce", "splash", "pulse", "flip", "still");
+	/** When the game starts; the older on/off "cube" switch maps to spin or still. */
+	static final String STYLE = pick(System.getProperty("nimbus.anim.style"), flag("cube") ? "spin" : "still");
+	/** When resource packs load in game. */
+	static final String RELOAD_STYLE = pick(System.getProperty("nimbus.anim.reloadStyle"), STYLE);
+	static final boolean CUBE_MOTION = !"still".equals(STYLE);
 	public static final boolean BADGE = flag("badge");
 	static final boolean MENU_MOTION = flag("menus");
 	static final float SPEED = speed();
+
+	private static String pick(String value, String fallback) {
+		return value != null && STYLES.contains(value) ? value : fallback;
+	}
 
 	private static boolean flag(String name) {
 		return !"false".equalsIgnoreCase(System.getProperty("nimbus.anim." + name));
@@ -52,6 +62,11 @@ public final class NimbusArt {
 	 * @param millis   time since this loading screen appeared
 	 */
 	public static void loading(Canvas c, float progress, float alpha, float barAlpha, boolean opaque, long millis) {
+		loading(c, progress, alpha, barAlpha, opaque, millis, false);
+	}
+
+	/** @param reload true when resource packs are loading in game, false when the game starts */
+	public static void loading(Canvas c, float progress, float alpha, float barAlpha, boolean opaque, long millis, boolean reload) {
 		if (alpha <= 0.01f) return;
 		int w = c.width();
 		int h = c.height();
@@ -64,9 +79,7 @@ public final class NimbusArt {
 		int cell = Math.max(1, Math.round(size / 8f));
 		int cx = w / 2;
 		int cy = Math.round(h * 0.36f);
-		float intro = easeOutCubic(clamp01(t / 0.6f));
-		int bob = CUBE_MOTION ? Math.round((float) Math.sin(t * Math.PI * 2 / 2.4) * size * 0.08f) : 0;
-		logo(c, cx, cy + bob + Math.round((1 - intro) * size * 0.4f), size, cell, CUBE_MOTION ? t : 1f, alpha * intro, CUBE_MOTION);
+		animatedLogo(c, reload ? RELOAD_STYLE : STYLE, cx, cy, size, cell, t, alpha);
 
 		int big = Math.max(2, Math.round(h / 72f));
 		String word = "NIMBUS";
@@ -93,6 +106,32 @@ public final class NimbusArt {
 			text(c, status, barX, barY + barH + 5, tiny, 1, MUTED, alpha * barAlpha);
 			String pct = Math.round(progress * 100) + "%";
 			text(c, pct, barX + barW - textWidth(pct, tiny, 1), barY + barH + 5, tiny, 1, WHITE, alpha * barAlpha * 0.8f);
+		}
+	}
+
+	/** The Nimbus Features icon for a small 20x20 button: the logo. */
+	public static void featuresIcon(Canvas c, int x, int y, long millis) {
+		logo(c, x + 10, y + 10, 5, 1, millis * SPEED / 1000f, 1f, CUBE_MOTION);
+	}
+
+	/** The Skins & Capes icon for a small 20x20 button: a little pixel shirt. */
+	public static void skinsIcon(Canvas c, int x, int y) {
+		String[] rows = {
+			"..##..##..",
+			".########.",
+			"##########",
+			"##.####.##",
+			"...####...",
+			"...####...",
+			"...####...",
+			"...####...",
+		};
+		for (int r = 0; r < rows.length; r++) {
+			for (int col = 0; col < rows[r].length(); col++) {
+				if (rows[r].charAt(col) != '#') continue;
+				int rgb = mix(RING_B, 0x6D3DF0, r / 8f);
+				c.rect(x + 5 + col, y + 6 + r, x + 6 + col, y + 7 + r, argb(rgb, 1f));
+			}
 		}
 	}
 
@@ -172,11 +211,145 @@ public final class NimbusArt {
 		}
 	}
 
+	/**
+	 * The logo on the loading screen, moving in the chosen style:
+	 * spin (bobs, a glint runs round the ring), bounce (hops with squash and stretch),
+	 * splash (drops in and lands in rippling water), pulse (beats and sends out waves),
+	 * flip (flips over now and then) or still.
+	 */
+	static void animatedLogo(Canvas c, String style, int cx, int cy, int size, int cell, float t, float alpha) {
+		float intro = easeOutCubic(clamp01(t / 0.6f));
+		float a = alpha * intro;
+		int dy = Math.round((1 - intro) * size * 0.4f);
+		float sx = 1f;
+		float sy = 1f;
+		int ground = cy + Math.round(size * 1.25f);
+		switch (style) {
+			case "bounce" -> {
+				float p = (t % 0.9f) / 0.9f;
+				float up = 4 * p * (1 - p);
+				float contact = Math.max(0f, 1f - Math.min(p, 1 - p) / 0.12f);
+				dy += -Math.round(up * size * 0.9f) + Math.round(contact * size * 0.12f);
+				sx = 1f + 0.18f * contact - 0.04f * up;
+				sy = 1f - 0.2f * contact + 0.06f * up;
+				shadow(c, cx, ground, size, 1f - up * 0.55f, a);
+			}
+			case "splash" -> {
+				float fall = clamp01(t / 0.7f);
+				a = alpha * clamp01(t / 0.25f);
+				if (fall < 1f) {
+					dy = -Math.round((1 - fall * fall) * size * 3.2f);
+					sy = 1f + 0.12f * fall;
+					sx = 1f - 0.06f * fall;
+				} else {
+					float k = t - 0.7f;
+					float wob = (float) (Math.exp(-k * 6) * Math.sin(k * 26));
+					sx = 1f + 0.2f * wob;
+					sy = 1f - 0.2f * wob;
+					dy = Math.round((float) Math.sin(Math.max(0, k - 0.6f) * Math.PI * 2 / 2.4) * size * 0.08f);
+					splash(c, cx, ground - size / 4, size, cell, k, alpha);
+				}
+			}
+			case "pulse" -> {
+				float p = t % 1.3f;
+				float beat = bump(p, 0.12f, 0.12f) + 0.7f * bump(p, 0.36f, 0.1f);
+				sx = sy = 1f + 0.14f * beat;
+				for (float start : new float[] {0.12f, 0.36f}) {
+					float k = p - start;
+					if (k < 0) k += 1.3f;
+					if (k < 0.9f) wave(c, cx, cy + size / 6, size * (1.2f + k * 2.4f), size * (0.5f + k * 1.1f), cell, a * (1 - k / 0.9f) * 0.6f, 0x0);
+				}
+			}
+			case "flip" -> {
+				float p = (t % 2.2f) / 2.2f;
+				if (p > 0.35f && p < 0.7f) {
+					float k = (p - 0.35f) / 0.35f;
+					sy = (float) Math.abs(Math.cos(Math.PI * easeInOut(k)));
+					dy -= Math.round((float) Math.sin(Math.PI * k) * size * 0.6f);
+				}
+				shadow(c, cx, ground, size, 0.8f, a * 0.8f);
+			}
+			case "still" -> {
+				logo(c, cx, cy + dy, size, cell, 1f, a, false, 1f, 1f);
+				return;
+			}
+			default -> dy += Math.round((float) Math.sin(t * Math.PI * 2 / 2.4) * size * 0.08f);
+		}
+		logo(c, cx, cy + dy, size, cell, t, a, true, sx, sy);
+	}
+
+	/** A soft bump 0..1..0 centred on `at`, `width` seconds wide. */
+	private static float bump(float x, float at, float width) {
+		float d = Math.abs(x - at) / width;
+		return d >= 1f ? 0f : (float) (0.5 + 0.5 * Math.cos(Math.PI * d));
+	}
+
+	private static float easeInOut(float k) {
+		return k < 0.5f ? 2 * k * k : 1 - (float) Math.pow(-2 * k + 2, 2) / 2;
+	}
+
+	/** A dark ellipse on the ground under the logo. */
+	private static void shadow(Canvas c, int cx, int y, int size, float scale, float alpha) {
+		float rx = size * 0.95f * scale;
+		float ry = size * 0.16f * Math.max(0.5f, scale);
+		int step = Math.max(1, Math.round(ry / 3));
+		for (int row = -Math.round(ry); row < Math.round(ry); row += step) {
+			float k = (row + step / 2f) / ry;
+			if (k * k >= 1f) continue;
+			int half = Math.round(rx * (float) Math.sqrt(1 - k * k));
+			c.rect(cx - half, y + row, cx + half, y + row + step, argb(0x000000, 0.22f * alpha));
+		}
+	}
+
+	/** Landing in water: rings spreading out every couple of seconds, and a burst of drops at first. */
+	private static void splash(Canvas c, int cx, int y, int size, int cell, float k, float alpha) {
+		for (int i = 0; i < 3; i++) {
+			float r = (k - i * 0.22f) % 2.4f;
+			if (r < 0 || r > 1.4f) continue;
+			float f = r / 1.4f;
+			wave(c, cx, y, size * (0.9f + f * 2.6f), size * (0.25f + f * 0.7f), cell, alpha * (1 - f) * 0.8f, 0x0);
+		}
+		if (k < 0.9f) {
+			for (int i = 0; i < 12; i++) {
+				float vx = (hash(i * 5 + 1) - 0.5f) * size * 5f;
+				float vy = -(0.9f + hash(i * 5 + 2)) * size * 3.4f;
+				int x = cx + Math.round(vx * k);
+				int yy = y + Math.round(vy * k + 9f * size * k * k);
+				int s = Math.max(cell, Math.round(size / 10f));
+				c.rect(x, yy, x + s, yy + s, argb(i % 3 == 0 ? RING_A : i % 3 == 1 ? RING_B : WHITE, alpha * (1 - k / 0.9f)));
+			}
+		}
+	}
+
+	/** A flat ellipse outline in pixels, for ripples and pulse waves. `rgb` 0 means the ring gradient. */
+	private static void wave(Canvas c, int cx, int cy, float rx, float ry, int cell, float alpha, int rgb) {
+		if (alpha <= 0.01f) return;
+		int steps = Math.max(48, Math.round(rx * 6f / cell));
+		int lastX = Integer.MIN_VALUE;
+		int lastY = Integer.MIN_VALUE;
+		for (int i = 0; i < steps; i++) {
+			double ang = i * Math.PI * 2 / steps;
+			int x = cx + Math.floorDiv((int) Math.round(Math.cos(ang) * rx), cell) * cell;
+			int y = cy + Math.floorDiv((int) Math.round(Math.sin(ang) * ry), cell) * cell;
+			if (x == lastX && y == lastY) continue;
+			lastX = x;
+			lastY = y;
+			float along = (float) (Math.cos(ang) + 1) / 2;
+			int col = rgb != 0 ? rgb : along < 0.5f ? mix(RING_A, RING_B, along * 2) : mix(RING_B, RING_C, along * 2 - 1);
+			c.rect(x, y, x + cell, y + cell, argb(col, alpha));
+		}
+	}
+
 	/** The Nimbus logo: the block inside its tilted halo ring, back half of the ring first. */
 	static void logo(Canvas c, int cx, int cy, int size, int cell, float t, float alpha, boolean motion) {
-		ring(c, cx, cy, size, cell, t, alpha, false, motion);
-		cube(c, cx, cy, size, cell, t, alpha);
-		ring(c, cx, cy, size, cell, t, alpha, true, motion);
+		logo(c, cx, cy, size, cell, t, alpha, motion, 1f, 1f);
+	}
+
+	/** The logo squashed or stretched by sx and sy around its centre. */
+	static void logo(Canvas c, int cx, int cy, int size, int cell, float t, float alpha, boolean motion, float sx, float sy) {
+		ring(c, cx, cy, size, cell, t, alpha, false, motion, sx, sy);
+		cube(c, cx, cy, size, cell, t, alpha, sx, sy);
+		ring(c, cx, cy, size, cell, t, alpha, true, motion, sx, sy);
 	}
 
 	/**
@@ -184,6 +357,10 @@ public final class NimbusArt {
 	 * left or right face of the hexagon, so the look scales to any size.
 	 */
 	static void cube(Canvas c, int cx, int cy, int size, int cell, float t, float alpha) {
+		cube(c, cx, cy, size, cell, t, alpha, 1f, 1f);
+	}
+
+	static void cube(Canvas c, int cx, int cy, int size, int cell, float t, float alpha, float sx, float sy) {
 		float r3 = (float) Math.sqrt(3);
 		int half = size;
 		int halfW = Math.round(size * r3 / 2f);
@@ -206,7 +383,11 @@ public final class NimbusArt {
 				} else {
 					col = mix(0x6D3DF0, 0x3A168F, (v + 0.5f) / 1.5f);
 				}
-				c.rect(cx + px, cy + py, cx + px + cell, cy + py + cell, argb(col, alpha));
+				int x0 = cx + Math.round(px * sx);
+				int y0 = cy + Math.round(py * sy);
+				int x1 = cx + Math.round((px + cell) * sx);
+				int y1 = cy + Math.round((py + cell) * sy);
+				if (x1 > x0 && y1 > y0) c.rect(x0, y0, x1, y1, argb(col, alpha));
 			}
 		}
 	}
@@ -219,7 +400,7 @@ public final class NimbusArt {
 	 * The halo: an ellipse tilted like the logo's, cyan to violet to pink, snapped to
 	 * the pixel grid. A glint runs round it while `motion` is on.
 	 */
-	private static void ring(Canvas c, int cx, int cy, int size, int cell, float t, float alpha, boolean front, boolean motion) {
+	private static void ring(Canvas c, int cx, int cy, int size, int cell, float t, float alpha, boolean front, boolean motion, float sx, float sy) {
 		float rx = size * 1.55f;
 		float ry = size * 0.45f;
 		int thick = Math.max(cell, Math.round(size * 0.2f / cell) * cell);
@@ -236,8 +417,8 @@ public final class NimbusArt {
 			double ex = Math.cos(a) * rx;
 			double ey = Math.sin(a) * ry;
 			if ((ey > 0) != front) continue;
-			int x = cx + Math.floorDiv((int) Math.round(ex * ct - ey * st) - thick / 2, cell) * cell;
-			int y = oy + Math.floorDiv((int) Math.round(ex * st + ey * ct) - thick / 2, cell) * cell;
+			int x = cx + Math.floorDiv((int) Math.round((ex * ct - ey * st) * sx) - thick / 2, cell) * cell;
+			int y = cy + Math.round((oy - cy) * sy) + Math.floorDiv((int) Math.round((ex * st + ey * ct) * sy) - thick / 2, cell) * cell;
 			if (x == lastX && y == lastY) continue;
 			lastX = x;
 			lastY = y;
