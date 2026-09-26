@@ -635,7 +635,8 @@ test('discord: what the status says in the launcher, in menus, in worlds and on 
 test('discord: talks to the Discord app over its local socket, and clears the status on stop', async () => {
   const net = require('net');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nimbus-discord-'));
-  const sockPath = path.join(dir, 'discord-ipc-0');
+  // Discord listens on a named pipe on Windows and a socket file elsewhere
+  const sockPath = process.platform === 'win32' ? `\\\\.\\pipe\\nimbus-discord-test-${process.pid}` : path.join(dir, 'discord-ipc-0');
   const got = [];
   const server = net.createServer((sock) => {
     let buf = Buffer.alloc(0);
