@@ -322,7 +322,7 @@ public final class NimbusArt {
 	}
 
 	/** A flat ellipse outline in pixels, for ripples and pulse waves. `rgb` 0 means the ring gradient. */
-	private static void wave(Canvas c, int cx, int cy, float rx, float ry, int cell, float alpha, int rgb) {
+	static void wave(Canvas c, int cx, int cy, float rx, float ry, int cell, float alpha, int rgb) {
 		if (alpha <= 0.01f) return;
 		int steps = Math.max(48, Math.round(rx * 6f / cell));
 		int lastX = Integer.MIN_VALUE;
@@ -590,7 +590,7 @@ public final class NimbusArt {
 		return 1 - x * x * x;
 	}
 
-	private static float easeOutBack(float k) {
+	static float easeOutBack(float k) {
 		float c1 = 1.70158f;
 		float c3 = c1 + 1;
 		float x = k - 1;
@@ -598,7 +598,7 @@ public final class NimbusArt {
 	}
 
 	/** Stable pseudo-random 0..1 per index, so particles do not jump between frames. */
-	private static float hash(int n) {
+	static float hash(int n) {
 		int x = n * 0x27d4eb2d;
 		x ^= x >>> 15;
 		x *= 0x85ebca6b;

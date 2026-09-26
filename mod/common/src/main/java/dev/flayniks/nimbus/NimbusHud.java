@@ -32,7 +32,7 @@ public final class NimbusHud {
 	private static double lastX = Double.NaN;
 	private static double lastZ;
 	private static long lastMove;
-	private static double speed;
+	static double speed;
 	private static boolean shortcutWasDown;
 
 	// ------------------------------------------------------------------ modules
@@ -416,6 +416,11 @@ public final class NimbusHud {
 		}
 		try {
 			drawModules(c);
+			try {
+				CrazyFx.hud(c);
+			} catch (Throwable ignored) {
+				// the effects are extra
+			}
 		} finally {
 			try {
 				// with a menu open it's drawn by the menu instead, above its blur

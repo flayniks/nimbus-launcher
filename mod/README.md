@@ -14,9 +14,16 @@ Like the loading screen, it is painted with rectangles and text only. Skins are 
 
 ## Nimbus Features
 
-`FeaturesScreenBase` lists every option (`Features`) in three tabs: HUD, Performance and Utilities. The HUD boxes (`NimbusHud`) are drawn after the vanilla HUD (`HudMixin`) and placed with `HudEditorBase`, which stores each box's position as a fraction of the screen, so layouts survive a window resize. Zoom, fullbright and the background FPS limit (`Tweaks`) bend vanilla options past their normal range through an accessor (`OptionAccess`) and put the real values back when they're switched off. Everything is saved to the file given as `-Dnimbus.features=<file>` (the launcher shares one between all instances), or `config/nimbus-features.json` without it.
+`FeaturesScreenBase` lists every option (`Features`) in four tabs: HUD, Performance, Utilities and Animations. The HUD boxes (`NimbusHud`) are drawn after the vanilla HUD (`HudMixin`) and placed with `HudEditorBase`, which stores each box's position as a fraction of the screen, so layouts survive a window resize. Zoom, fullbright and the background FPS limit (`Tweaks`) bend vanilla options past their normal range through an accessor (`OptionAccess`) and put the real values back when they're switched off. Everything is saved to the file given as `-Dnimbus.features=<file>` (the launcher shares one between all instances), or `config/nimbus-features.json` without it.
 
 Right Shift opens the menu and C zooms. On 26.3, which reads keys through SDL, the key codes are translated at runtime.
+
+## Crazy animations
+
+`CrazyFx` is off until *Animations → Crazy animations* is switched on (`fx.crazy`), and every effect has its own switch (`fx.transitions`, `fx.cursor`, `fx.buttons`, `fx.sparkles`, `fx.action`, `fx.speed`, `fx.heartbeat`) plus an amount (`fx.level`). It keeps two particle layers, each with its own clock, both drawn with the `Canvas` rectangles like the rest of the art:
+
+- **Menus** (`ScreenFxMixin`, around `Screen.renderWithTooltip`, `extractRenderStateWithTooltipAndSubtitles` on 26.x): a new screen gets a block dissolve, shutters or a zoom slam (the zoom scales the whole screen through the pose stack for 0.4 s), then the cursor trail, click bursts, the glow around the hovered widget (found by position, looking inside lists) and the floating sparkles are drawn on top.
+- **In game** (from `NimbusHud.render`): it compares health, XP level and progress, the hotbar slot (`Compat.selectedSlot`: a field up to 1.21.4, a method from 1.21.5), what's in your inventory and how you're moving with the last frame, and plays the matching effect. Hits come from `AttackMixin` on `MultiPlayerGameMode.attack`, so short clicks at a low frame rate are never missed. Chat opening and closing is ignored, and pickups wait a moment after a container closes so items falling back out of a crafting grid don't count.
 
 ## Nimbus LAN
 

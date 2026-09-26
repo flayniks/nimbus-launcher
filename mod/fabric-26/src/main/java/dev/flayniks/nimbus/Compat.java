@@ -182,6 +182,13 @@ public final class Compat {
 		}
 	}
 
+	// ---------------------------------------------------------------- crazy animations
+
+	/** The hotbar slot in hand. */
+	public static int selectedSlot(net.minecraft.world.entity.player.Player player) {
+		return player.getInventory().getSelectedSlot();
+	}
+
 	// ---------------------------------------------------------------- Nimbus LAN
 
 	public static boolean inSingleplayer() {

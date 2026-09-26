@@ -14,7 +14,7 @@ final class Features {
 	private Features() {
 	}
 
-	static final String[] TABS = {"HUD", "Performance", "Utilities"};
+	static final String[] TABS = {"HUD", "Performance", "Utilities", "Animations"};
 
 	enum Kind { TOGGLE, CYCLE, ACTION }
 
@@ -30,6 +30,9 @@ final class Features {
 		Consumer<Integer> choose;
 		Runnable action;
 		String actionLabel;
+		/** When set, the row only works while this is true (the Crazy animations extras). */
+		BooleanSupplier needs;
+		String needsHint;
 
 		Row(int tab, String name, String description, Kind kind) {
 			this.tab = tab;
@@ -52,6 +55,11 @@ final class Features {
 			}
 		}
 
+		/** Available here and not waiting on another switch. */
+		boolean usable() {
+			return available() && (needs == null || needs.getAsBoolean());
+		}
+
 		String valueLabel() {
 			try {
 				return switch (kind) {
@@ -68,6 +76,7 @@ final class Features {
 		}
 
 		void click() {
+			if (needs != null && !needs.getAsBoolean()) return;
 			try {
 				switch (kind) {
 					case TOGGLE -> setOn.accept(!isOn.getAsBoolean());
@@ -227,6 +236,28 @@ final class Features {
 		ROWS.add(choice(util, "menu.background", 0, "Menu background", "Behind the title screen and menus: Minecraft's panorama, the Nimbus glow or your own picture", MenuBackground.MODES));
 		ROWS.add(action(util, "Background picture", "Pick a PNG from your computer for the menu background", "Choose…", MenuBackground::choose));
 		ROWS.add(toggle(util, "menu.shortcut", true, "Right Shift opens this menu", "Press Right Shift in game to open Nimbus Features"));
+
+		int fx = 3;
+		Row crazy = toggle(fx, "fx.crazy", false, "Crazy animations", "A LOT of wild effects: menus burst in, rainbow cursor, glowing buttons, LEVEL UP explosions, combos and more");
+		crazy.setOn = (on) -> {
+			NimbusConfig.set("fx.crazy", on);
+			if (on) CrazyFx.celebrate();
+		};
+		ROWS.add(crazy);
+		ROWS.add(needsCrazy(choice(fx, "fx.level", 1, "How crazy", "How much flies around: Wild, Insane or Maximum chaos", CrazyFx.LEVELS)));
+		ROWS.add(needsCrazy(toggle(fx, "fx.transitions", true, "Menu transitions", "Menus open with a bang: blocks breaking away, shutters sliding open or a zoom slam")));
+		ROWS.add(needsCrazy(toggle(fx, "fx.cursor", true, "Rainbow cursor", "A sparkly trail behind the mouse in menus, and a burst on every click")));
+		ROWS.add(needsCrazy(toggle(fx, "fx.buttons", true, "Glowing buttons", "Light races around the button under your mouse")));
+		ROWS.add(needsCrazy(toggle(fx, "fx.sparkles", true, "Sparkles and shooting stars", "Twinkles float up in every menu, with a shooting star now and then")));
+		ROWS.add(needsCrazy(toggle(fx, "fx.action", true, "Action effects", "Hit markers and combos, LEVEL UP explosions, damage numbers, pickups, hotbar pops and big landings")));
+		ROWS.add(needsCrazy(toggle(fx, "fx.speed", true, "Speed lines", "Anime speed lines when you sprint or fly fast")));
+		ROWS.add(needsCrazy(toggle(fx, "fx.heartbeat", true, "Low-health heartbeat", "The screen edges pulse red when you are nearly out of hearts")));
+	}
+
+	private static Row needsCrazy(Row r) {
+		r.needs = CrazyFx::on;
+		r.needsHint = "Turn on Crazy animations first";
+		return r;
 	}
 
 	static List<Row> tab(int tab) {

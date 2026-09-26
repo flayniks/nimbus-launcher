@@ -186,6 +186,47 @@ public final class Compat {
 		done.accept(path);
 	}
 
+	// ---------------------------------------------------------------- crazy animations
+
+	private static Method selectedMethod;
+	private static java.lang.reflect.Field selectedField;
+	private static boolean selectedLooked;
+
+	/** The hotbar slot in hand: a public field up to 1.21.4, getSelectedSlot() from 1.21.5. */
+	public static int selectedSlot(net.minecraft.world.entity.player.Player player) {
+		Class<?> inv = net.minecraft.world.entity.player.Inventory.class;
+		if (!selectedLooked) {
+			selectedLooked = true;
+			for (String name : new String[] {"method_67532", "getSelectedSlot"}) {
+				try {
+					selectedMethod = inv.getMethod(name);
+					break;
+				} catch (NoSuchMethodException ignored) {
+					// older version
+				}
+			}
+			if (selectedMethod == null) {
+				for (String name : new String[] {"field_7545", "selected"}) {
+					try {
+						selectedField = inv.getDeclaredField(name);
+						selectedField.setAccessible(true);
+						break;
+					} catch (ReflectiveOperationException | RuntimeException ignored) {
+						// try the other name
+					}
+				}
+			}
+		}
+		try {
+			Object i = player.getInventory();
+			if (selectedMethod != null) return (Integer) selectedMethod.invoke(i);
+			if (selectedField != null) return selectedField.getInt(i);
+		} catch (ReflectiveOperationException | RuntimeException ignored) {
+			// unknown
+		}
+		return -1;
+	}
+
 	// ---------------------------------------------------------------- Nimbus LAN
 
 	public static boolean inSingleplayer() {
