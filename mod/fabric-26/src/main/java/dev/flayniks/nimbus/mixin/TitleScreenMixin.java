@@ -25,8 +25,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(TitleScreen.class)
 public abstract class TitleScreenMixin extends Screen {
 	@Unique private long nimbus$shown = -1L;
-	/** {x, y1, y2, width} of the two buttons; icons are drawn on them when they are the small kind. */
-	@Unique private int[] nimbus$at;
+	/** The two buttons; when they are the small kind, their icons are drawn wherever they are now (other mods move title-screen buttons around). */
+	@Unique private Button nimbus$features;
+	@Unique private Button nimbus$skins;
 
 	protected TitleScreenMixin(Component title) {
 		super(title);
@@ -40,7 +41,6 @@ public abstract class TitleScreenMixin extends Screen {
 			if (l instanceof AbstractWidget w) taken.add(new int[] {w.getX(), w.getY(), w.getWidth(), w.getHeight()});
 		}
 		int[] at = TitleButtons.place(this.width, this.height, taken);
-		nimbus$at = at;
 		boolean small = at[3] < TitleButtons.FULL_W;
 		Button features = Button.builder(Component.literal(small ? "" : "Nimbus Features"), b -> NimbusHud.openMenu(self))
 			.bounds(at[0], at[1], at[3], TitleButtons.H).build();
@@ -52,6 +52,8 @@ public abstract class TitleScreenMixin extends Screen {
 		}
 		this.addRenderableWidget(features);
 		this.addRenderableWidget(skins);
+		nimbus$features = small ? features : null;
+		nimbus$skins = small ? skins : null;
 	}
 
 	@Inject(method = "extractRenderState", at = @At("TAIL"), require = 0)
@@ -60,10 +62,9 @@ public abstract class TitleScreenMixin extends Screen {
 		if (nimbus$shown < 0) nimbus$shown = now;
 		GuiCanvas canvas = new GuiCanvas(graphics);
 		NimbusArt.badge(canvas, now - nimbus$shown);
-		int[] at = nimbus$at;
-		if (at != null && at[3] < TitleButtons.FULL_W) {
-			NimbusArt.featuresIcon(canvas, at[0], at[1], now - nimbus$shown);
-			NimbusArt.skinsIcon(canvas, at[0], at[2]);
-		}
+		Button features = nimbus$features;
+		Button skins = nimbus$skins;
+		if (features != null && features.visible) NimbusArt.featuresIcon(canvas, features.getX(), features.getY(), now - nimbus$shown);
+		if (skins != null && skins.visible) NimbusArt.skinsIcon(canvas, skins.getX(), skins.getY());
 	}
 }
