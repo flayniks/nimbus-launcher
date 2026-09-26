@@ -106,12 +106,39 @@ async function readJson(p, fallback) {
 
 /** Writes through a temp file so a crash never leaves half a JSON file behind. */
 let tmpSeq = 0;
-async function writeJson(p, data) {
+const writing = new Map();
+
+/**
+ * Writes JSON atomically (temp file, then rename). Writes to the same file take turns:
+ * Windows refuses a rename onto a file another rename is replacing (EPERM), and the
+ * last call must be the one that lands. The data is captured when you call.
+ */
+function writeJson(p, data) {
+  const text = JSON.stringify(data, null, 2);
+  const next = (writing.get(p) || Promise.resolve()).catch(() => {}).then(() => writeNow(p, text));
+  writing.set(p, next);
+  next.catch(() => {}).finally(() => { if (writing.get(p) === next) writing.delete(p); });
+  return next;
+}
+
+async function writeNow(p, text) {
   await fsp.mkdir(path.dirname(p), { recursive: true });
-  // unique per write: two saves in the same millisecond must not share a temp file
   const tmp = `${p}.${process.pid}.${Date.now()}.${++tmpSeq}.tmp`;
-  await fsp.writeFile(tmp, JSON.stringify(data, null, 2));
-  await fsp.rename(tmp, p);
+  await fsp.writeFile(tmp, text);
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await fsp.rename(tmp, p);
+      return;
+    } catch (err) {
+      // antivirus and indexers briefly lock files on Windows
+      if (attempt < 6 && ['EPERM', 'EACCES', 'EBUSY'].includes(err.code)) {
+        await new Promise((r) => setTimeout(r, 25 * attempt));
+        continue;
+      }
+      await fsp.rm(tmp, { force: true }).catch(() => {});
+      throw err;
+    }
+  }
 }
 
 /** Runs `worker` over `items` with at most `limit` in flight. */

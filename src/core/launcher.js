@@ -103,10 +103,7 @@ class Launcher extends EventEmitter {
     const allowed = Object.keys(DEFAULT_SETTINGS).filter((k) => k !== 'clientToken');
     for (const k of allowed) if (k in patch) this.settings[k] = patch[k];
     this.settings.concurrency = Math.max(2, Math.min(64, Number(this.settings.concurrency) || 16));
-    // one write at a time, so an older snapshot can never land after a newer one
-    const snapshot = { ...this.settings };
-    this.settingsWrite = (this.settingsWrite || Promise.resolve()).catch(() => {}).then(() => writeJson(this.paths.settings, snapshot));
-    await this.settingsWrite;
+    await writeJson(this.paths.settings, this.settings);
     return this.getSettings();
   }
 

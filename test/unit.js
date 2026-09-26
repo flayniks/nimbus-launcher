@@ -458,7 +458,7 @@ test('writeJson: saves in the same millisecond do not trip over each other', asy
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'nimbus-wj-'));
   const file = path.join(root, 'settings.json');
   await Promise.all(Array.from({ length: 40 }, (_, i) => util.writeJson(file, { i })));
-  assert.equal(typeof (await util.readJson(file)).i, 'number');
+  assert.deepEqual(await util.readJson(file), { i: 39 }); // the last call wins
   assert.deepEqual(fs.readdirSync(root), ['settings.json']);
   fs.rmSync(root, { recursive: true, force: true });
 });
