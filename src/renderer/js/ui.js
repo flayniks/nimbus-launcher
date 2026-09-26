@@ -116,6 +116,86 @@ export function stagger(parent) {
   return parent;
 }
 
+/**
+ * A stage line and progress bar that update in place. Quick flips (a file check that
+ * finishes at once, a step that lasts a few frames) are smoothed out so nothing flickers:
+ * the text changes at most every ~350ms, the bar only turns into the sliding "busy" bar
+ * if the number stays away for a moment, and a new step jumps back to 0 instead of
+ * sliding backwards.
+ */
+export function liveProgress({ bar = 'pbar', striped = true } = {}) {
+  const stage = h('span.lp-stage');
+  const detail = h('span.lp-detail');
+  const fill = h(striped ? 'i.striped' : 'i');
+  const track = h(`div.${bar}.indeterminate`, fill);
+  let shown = null;
+  let pending = null;
+  let stageTimer = null;
+  let stageAt = 0;
+  let busyTimer = null;
+  let last = null;
+
+  function showStage() {
+    stageTimer = null;
+    shown = pending;
+    stage.textContent = shown;
+    stageAt = Date.now();
+  }
+
+  function setBar(p) {
+    if (p == null) {
+      if (last == null || busyTimer) return;
+      busyTimer = setTimeout(() => { busyTimer = null; last = null; track.classList.add('indeterminate'); }, 450);
+      return;
+    }
+    clearTimeout(busyTimer);
+    busyTimer = null;
+    const v = Math.max(0, Math.min(1, p));
+    if (last == null || v < last - 0.02) {
+      fill.style.transition = 'none';
+      fill.style.width = `${v * 100}%`;
+      track.classList.remove('indeterminate');
+      void fill.offsetWidth; // apply the jump before turning the easing back on
+      fill.style.transition = '';
+    } else if (v !== last) {
+      fill.style.width = `${v * 100}%`;
+    }
+    last = v;
+  }
+
+  return {
+    stage,
+    detail,
+    bar: track,
+    update(text, p, info = '') {
+      if (text && text !== shown) {
+        pending = text;
+        const wait = 350 - (Date.now() - stageAt);
+        if (shown == null || wait <= 0) { clearTimeout(stageTimer); showStage(); }
+        else if (!stageTimer) stageTimer = setTimeout(showStage, wait);
+      } else if (text && text === shown && stageTimer) {
+        clearTimeout(stageTimer); // it flipped back before anyone could see it
+        stageTimer = null;
+      }
+      if (detail.textContent !== info) detail.textContent = info;
+      setBar(p);
+    },
+    dispose() {
+      clearTimeout(stageTimer);
+      clearTimeout(busyTimer);
+    },
+  };
+}
+
+/** How far along a launcher task is, 0..1, or null while that is unknown. */
+export function taskProgress(t) {
+  if (!t) return null;
+  if (t.state === 'done') return 1;
+  if (t.checking || !t.total) return null;
+  if (t.totalBytes) return Math.min(1, t.bytes / t.totalBytes);
+  return t.done / t.total;
+}
+
 // ---------------------------------------------------------------- formatting
 
 export function fmtNumber(n) {

@@ -261,6 +261,11 @@ input[type='range']:active::-webkit-slider-thumb { transform: scale(1.2); }
 .inst-card .play-fab:hover { transform: scale(1.08); }
 .inst-card .bar { height: 4px; border-radius: 99px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
 .inst-card .bar i { display: block; height: 100%; background: var(--grad); border-radius: 99px; transition: width 0.3s var(--ease); }
+.inst-card .bar.indeterminate i { width: 30% !important; animation: indet 1.2s var(--ease) infinite; }
+.inst-card .task-stage { font-size: 12px; margin-bottom: 6px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inst-card .task-slot:empty { display: none; }
+/* redraws after the first one should not replay the entrance animations */
+.settled > * { animation: none !important; }
 .inst-card.new { align-items: center; justify-content: center; min-height: 150px; border-style: dashed; color: var(--muted); font-weight: 600; gap: 10px; }
 .inst-card.new .plus { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: var(--panel-2); transition: transform 0.4s var(--ease-spring), background 0.25s; }
 .inst-card.new:hover .plus { transform: rotate(90deg) scale(1.08); background: var(--grad); color: #fff; }
@@ -347,7 +352,9 @@ input[type='range']:active::-webkit-slider-thumb { transform: scale(1.2); }
 .back:hover { color: var(--text); transform: translateX(-3px); }
 .back svg { width: 16px; height: 16px; }
 .progress-card { margin-bottom: 16px; padding: 14px 16px; border-radius: 14px; background: var(--panel); border: 1px solid var(--border); animation: rise 0.3s var(--ease) both; }
-.progress-card .row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px; color: var(--text-2); }
+.progress-card .row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; margin-bottom: 8px; color: var(--text-2); }
+.progress-card .row .lp-stage { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.progress-card .row .lp-detail { flex: none; font-variant-numeric: tabular-nums; }
 .pbar { height: 8px; border-radius: 99px; background: rgba(255, 255, 255, 0.07); overflow: hidden; }
 .pbar i { display: block; height: 100%; border-radius: 99px; background: var(--grad); transition: width 0.35s var(--ease); background-size: 28px 28px; }
 .pbar.indeterminate i { width: 35% !important; animation: indet 1.2s var(--ease) infinite; }

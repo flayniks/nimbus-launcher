@@ -159,8 +159,10 @@ class LaunchSplash {
 }
 
 /**
- * Self-updates from the rolling "nimbus-latest" GitHub release (see the workflow). The new
- * version downloads in the background and installs when the launcher restarts or quits.
+ * Self-updates from the rolling "nimbus-latest" GitHub release (see the workflow). Every
+ * start checks straight away (and again every few hours); a new version downloads in the
+ * background, then the window restarts into it (see installUpdate in the renderer) or it
+ * installs when the launcher quits.
  */
 const updates = { state: 'idle', version: null, percent: 0, message: null };
 
@@ -183,10 +185,18 @@ function setupUpdater() {
   autoUpdater.on('download-progress', (p) => setUpdate({ state: 'downloading', percent: p.percent }));
   autoUpdater.on('update-downloaded', (info) => setUpdate({ state: 'ready', version: info.version, percent: 100 }));
   autoUpdater.on('error', (err) => setUpdate({ state: 'error', message: String(err?.message || err).split('\n')[0] }));
-  const check = () => autoUpdater.checkForUpdates().catch(() => {});
-  setTimeout(check, 8000);
-  setInterval(check, UPDATE_EVERY);
+  setInterval(() => checkForUpdates(), UPDATE_EVERY);
   return autoUpdater;
+}
+
+let lastUpdateCheck = 0;
+
+/** Checks the feed unless a check or download is already under way (or one ran within `minGap`). */
+function checkForUpdates(minGap = 0) {
+  if (!updater || ['checking', 'downloading', 'ready'].includes(updates.state)) return;
+  if (Date.now() - lastUpdateCheck < minGap) return;
+  lastUpdateCheck = Date.now();
+  updater.checkForUpdates().catch(() => {});
 }
 
 function send(channel, payload) {
@@ -405,6 +415,8 @@ function registerIpc() {
   handle('update:state', () => ({ ...updates, current: app.getVersion() }));
   handle('update:check', async () => {
     if (!updater) throw new Error(updates.message || 'Updates are not available here.');
+    if (updates.state === 'downloading' || updates.state === 'ready') return { ...updates, current: app.getVersion() };
+    lastUpdateCheck = Date.now();
     await updater.checkForUpdates();
     return { ...updates, current: app.getVersion() };
   });
@@ -432,10 +444,14 @@ app.whenReady().then(async () => {
       win.show();
       win.focus();
     }
+    // back from a long session: see whether a new version came out meanwhile
+    checkForUpdates(30 * 60 * 1000);
   });
   registerIpc();
   createWindow();
   updater = setupUpdater();
+  // check on every start, as soon as the window is up
+  if (updater) win.webContents.once('did-finish-load', () => setTimeout(() => checkForUpdates(), 1200));
   app.on('activate', () => { if (!win) createWindow(); });
 });
 

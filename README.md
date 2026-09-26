@@ -10,7 +10,7 @@ A fast, good-looking launcher for **Minecraft: Java Edition** with licensed (Mic
 - **Right Java, automatically.** Nimbus downloads Mojang's own Java runtime for each version (8, 16, 17, 21 or 25), so you never install Java yourself.
 - **Nimbus loading screen.** Hit Play and an animated Nimbus splash follows the launch. In Fabric and Quilt instances the game itself then loads on the Nimbus screen instead of Mojang's red one, through the built-in **Nimbus Core** mod.
 - **Skins & capes.** Search thousands of skins or copy any player's skin by name, try them on a 3D player, keep a wardrobe and switch capes, right in the launcher. In Fabric and Quilt games you can do all of it from the title screen or the pause menu too.
-- **Updates itself.** New versions download in the background and install on restart.
+- **Updates itself.** Every time it opens, Nimbus checks for a new version, downloads it and restarts into it (it waits while you play or download, and *Later* keeps it for the next close). Settings has a *Check now* button too.
 - Live game console, crash detection, play time, one-click Repair, instance duplication, update checks for installed content, and an auto-join server option.
 
 ![Home](docs/home.png)
@@ -52,7 +52,7 @@ Once installed, it keeps itself up to date.
 1. On GitHub, open **Actions → Release → Run workflow**.
 2. Pick **patch** (1.1.0 → 1.1.1), **minor** (→ 1.2.0) or **major** (→ 2.0.0) and press **Run workflow**.
 
-That's it. The workflow bumps the version, commits it, builds the installer on Windows, publishes a `nimbus-v…` release, and refreshes the `nimbus-latest` release that installed launchers check. Every launcher finds the update on its next start, or within four hours. It downloads in the background and shows **Update ready · Restart** in the title bar. If you don't restart, the update installs the next time the launcher closes.
+That's it. The workflow bumps the version, commits it, builds the installer on Windows, publishes a `nimbus-v…` release, and refreshes the `nimbus-latest` release that installed launchers check. Every launcher finds the update the next time it opens (or within four hours if it stays open), downloads it, and restarts into it after a five-second countdown. It holds off while a game or a download is running. **Later** skips the countdown, and then the update installs the next time the launcher closes. After the restart the launcher says which version it's on.
 
 Pushing to `main` also rebuilds the installer, but a launcher only updates when the version number goes up. So when you want people to get a change, use the button (or bump `version` in `package.json` yourself).
 

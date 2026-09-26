@@ -1,4 +1,4 @@
-import { h, icon, clear, instanceIcon, fmtAgo, fmtDuration, fmtBytes, LOADER_NAMES, fail, ok, info, confirmDialog, segmented, toggle, rangeFill } from '../ui.js';
+import { h, icon, clear, instanceIcon, fmtAgo, fmtDuration, fmtBytes, LOADER_NAMES, fail, ok, info, confirmDialog, segmented, toggle, rangeFill, liveProgress, taskProgress } from '../ui.js';
 import { api, store } from '../store.js';
 import { go, play } from '../router.js';
 
@@ -23,7 +23,11 @@ export function render(page, params) {
   const body = h('div');
   page.append(h('button.back', { onclick: () => go('home') }, icon('back'), 'Library'), head, progress, tabBar, body);
 
+  let drawnHead = false;
   function drawHead() {
+    // only the first draw slides in; launches and game exits redraw it in place
+    head.classList.toggle('settled', drawnHead);
+    drawnHead = true;
     const running = store.running.has(inst.id);
     const task = store.taskFor(inst.id);
     const playBtn = h(`button.btn.primary.play${running ? '.stop' : ''}`, { onclick: () => play(inst.id) },
@@ -44,13 +48,21 @@ export function render(page, params) {
         playBtn)));
   }
 
+  // one progress card per task, updated in place (rebuilding it on every tick made it flicker)
+  let live = null;
   function drawProgress(t) {
-    clear(progress);
-    if (!t || t.state !== 'running') return;
-    const p = t.checking || !t.total ? null : t.totalBytes ? t.bytes / t.totalBytes : t.done / t.total;
-    progress.appendChild(h('div.progress-card',
-      h('div.row', h('span', t.stage), h('span', t.totalBytes ? `${fmtBytes(t.bytes)} / ${fmtBytes(t.totalBytes)}` : t.total ? `${t.done} / ${t.total}` : '')),
-      h(`div.pbar${p == null ? '.indeterminate' : ''}`, h('i.striped', { style: { width: `${(p ?? 0) * 100}%` } }))));
+    if (!t || t.state !== 'running') {
+      live?.dispose();
+      live = null;
+      clear(progress);
+      return;
+    }
+    if (!live) {
+      live = liveProgress();
+      clear(progress).appendChild(h('div.progress-card', h('div.row', live.stage, live.detail), live.bar));
+    }
+    const detail = t.checking ? '' : t.totalBytes ? `${fmtBytes(t.bytes)} / ${fmtBytes(t.totalBytes)}` : t.total ? `${t.done} / ${t.total}` : '';
+    live.update(t.stage, taskProgress(t), detail);
   }
 
   const tabs = segmented([
@@ -294,5 +306,5 @@ export function render(page, params) {
     const fresh = store.instances.find((i) => i.id === inst.id);
     if (fresh) { inst = fresh; drawHead(); }
   }));
-  return () => { offs.forEach((o) => o()); if (bodyCleanup) bodyCleanup(); };
+  return () => { offs.forEach((o) => o()); if (bodyCleanup) bodyCleanup(); live?.dispose(); };
 }

@@ -49,11 +49,11 @@ export function render(page) {
     const text = {
       disabled: u.message,
       checking: 'Checking for updates…',
-      current: 'You have the newest version.',
+      current: 'You have the newest version. Nimbus checks every time it opens.',
       downloading: `Downloading ${u.version || 'update'} — ${Math.round(u.percent || 0)}%`,
-      ready: `Version ${u.version} is downloaded. Restart to use it.`,
+      ready: `Version ${u.version} is downloaded. Restart to use it, or it installs when you close Nimbus.`,
       error: `Could not check: ${u.message}`,
-    }[u.state] || 'Checks automatically every few hours.';
+    }[u.state] || 'Checks every time Nimbus opens, and every few hours.';
     updStatus.textContent = text;
     updBtn.replaceChildren(icon(u.state === 'ready' ? 'zap' : 'refresh'), u.state === 'ready' ? 'Restart & update' : 'Check now');
     updBtn.classList.toggle('primary', u.state === 'ready');
@@ -62,8 +62,11 @@ export function render(page) {
   updBtn.onclick = async () => {
     try {
       if (store.update.state === 'ready') await api.updates.install();
-      else await api.updates.check();
-    } catch (err) { fail('Updates', err); }
+      else {
+        const u = await api.updates.check();
+        if (u.state === 'current') ok('No update right now', `Nimbus ${u.current} is the newest version.`);
+      }
+    } catch (err) { fail('Could not check for updates', err); }
   };
   drawUpdate();
   const offUpdate = store.on('update', drawUpdate);

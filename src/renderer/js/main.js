@@ -1,4 +1,4 @@
-import { h, icon, clear, fail, toast, fmtBytes } from './ui.js';
+import { h, icon, clear, fail, toast, fmtBytes, liveProgress, taskProgress } from './ui.js';
 import { api, store } from './store.js';
 import { go, registerPages, applyLook } from './router.js';
 import * as home from './pages/home.js';
@@ -22,13 +22,6 @@ const NAV = [
 
 // ---------------------------------------------------------------- task dock
 
-function taskProgress(t) {
-  if (t.state === 'done') return 1;
-  if (t.checking || !t.total) return null;
-  if (t.totalBytes) return Math.min(1, t.bytes / t.totalBytes);
-  return t.done / t.total;
-}
-
 function renderTaskPill() {
   const pill = document.querySelector('.task-pill');
   const active = [...store.tasks.values()].filter((t) => t.state === 'running');
@@ -36,6 +29,9 @@ function renderTaskPill() {
   const ring = pill.querySelector('.ring circle.v');
   const label = pill.querySelector('.lbl');
   if (!active.length) {
+    clearTimeout(pillSpin.timer);
+    Object.assign(pillSpin, { timer: null, on: false, seen: false });
+    ring.parentElement.style.animation = '';
     const failed = [...store.tasks.values()].some((t) => t.state === 'error');
     label.textContent = failed ? 'A task failed' : 'All done';
     ring.style.strokeDashoffset = failed ? 44 : 0;
@@ -43,27 +39,61 @@ function renderTaskPill() {
   }
   const t = active[active.length - 1];
   const p = taskProgress(t);
-  label.textContent = active.length > 1 ? `${active.length} tasks running` : t.label;
-  ring.style.strokeDashoffset = p == null ? 33 : 44 - 44 * p;
-  ring.parentElement.style.animation = p == null ? 'spin 1s linear infinite' : '';
+  const text = active.length > 1 ? `${active.length} tasks running` : t.label;
+  if (label.textContent !== text) label.textContent = text;
+  // like the bars: only start spinning if the number stays away for a moment
+  if (p == null) {
+    if (!pillSpin.timer && !pillSpin.on) {
+      pillSpin.timer = setTimeout(() => {
+        pillSpin.timer = null;
+        pillSpin.on = true;
+        ring.style.strokeDashoffset = 33;
+        ring.parentElement.style.animation = 'spin 1s linear infinite';
+      }, pillSpin.seen ? 450 : 0);
+    }
+    return;
+  }
+  clearTimeout(pillSpin.timer);
+  pillSpin.timer = null;
+  pillSpin.on = false;
+  pillSpin.seen = true;
+  ring.style.strokeDashoffset = 44 - 44 * p;
+  ring.parentElement.style.animation = '';
 }
+const pillSpin = { timer: null, on: false, seen: false };
 
 function openDock() {
   if (document.querySelector('.dock')) { document.querySelector('.dock').remove(); return; }
   const dock = h('div.dock');
+  // one row per task, kept and updated in place so the bars run smoothly
+  const rows = new Map();
+  const none = h('div.none', 'Nothing running right now.');
   const draw = () => {
-    clear(dock);
-    if (!store.tasks.size) { dock.appendChild(h('div.none', 'Nothing running right now.')); return; }
+    for (const [id, row] of rows) {
+      if (store.tasks.has(id)) continue;
+      row.live.dispose();
+      row.el.remove();
+      rows.delete(id);
+    }
+    if (!store.tasks.size) { if (!none.isConnected) dock.appendChild(none); return; }
+    none.remove();
     for (const t of store.tasks.values()) {
-      const p = taskProgress(t);
+      let row = rows.get(t.id);
+      if (!row) {
+        const live = liveProgress();
+        const el = h('div.task', h('div.row', h('b', t.label), live.detail), h('div.muted', { style: { fontSize: '12px', marginBottom: '7px' } }, live.stage), live.bar);
+        row = { el, live };
+        rows.set(t.id, row);
+        dock.appendChild(el);
+      }
       const detail = t.state === 'error' ? t.error
         : t.state === 'done' ? 'Done'
-          : t.totalBytes ? `${fmtBytes(t.bytes)} / ${fmtBytes(t.totalBytes)}`
-            : t.total ? `${t.done} / ${t.total}` : '';
-      dock.appendChild(h(`div.task${t.state === 'error' ? '.error' : ''}`,
-        h('div.row', h('b', t.label), h('span', detail)),
-        h('div.muted', { style: { fontSize: '12px', marginBottom: '7px' } }, t.stage),
-        h(`div.pbar${p == null && t.state === 'running' ? '.indeterminate' : ''}`, h(`i${t.state === 'running' ? '.striped' : ''}`, { style: { width: `${(p ?? 0) * 100}%` } }))));
+          : t.checking ? ''
+            : t.totalBytes ? `${fmtBytes(t.bytes)} / ${fmtBytes(t.totalBytes)}`
+              : t.total ? `${t.done} / ${t.total}` : '';
+      row.el.classList.toggle('error', t.state === 'error');
+      row.live.update(t.stage, taskProgress(t), detail);
+      row.live.bar.firstChild.classList.toggle('striped', t.state === 'running');
     }
   };
   draw();
@@ -73,6 +103,7 @@ function openDock() {
     if (dock.contains(e.target) || e.target.closest('.task-pill')) return;
     dock.remove();
     off();
+    rows.forEach((r) => r.live.dispose());
     document.removeEventListener('mousedown', away);
   };
   setTimeout(() => document.addEventListener('mousedown', away));
@@ -87,6 +118,75 @@ export async function installUpdate() {
   } catch (err) {
     fail('Update will install later', err);
   }
+}
+
+// A downloaded update restarts the launcher by itself, after a short countdown, as soon as
+// nothing would be interrupted: no game running and no downloads going.
+const autoUpdate = { announced: null, closeAnnounce: null, later: false, countdown: null, waitingShown: false };
+
+function busyWith() {
+  if (store.running.size > 0) return 'game';
+  if ([...store.tasks.values()].some((t) => t.state === 'running')) return 'tasks';
+  return null;
+}
+
+function maybeRestartForUpdate() {
+  const u = store.update;
+  if (u.state !== 'ready' || autoUpdate.later || autoUpdate.countdown) return;
+  const busy = busyWith();
+  if (busy) {
+    if (!autoUpdate.waitingShown) {
+      autoUpdate.waitingShown = true;
+      toast('info', `Nimbus ${u.version} is ready`, busy === 'game'
+        ? 'It installs as soon as you close Minecraft.'
+        : 'It installs as soon as your downloads finish.', { timeout: 7000 });
+    }
+    return;
+  }
+  let left = 5;
+  const text = h('span', `Restarting to update in ${left}s…`);
+  const tick = setInterval(() => {
+    left -= 1;
+    if (busyWith()) { stop(); maybeRestartForUpdate(); return; }
+    if (left <= 0) { stop(); installUpdate(); return; }
+    text.textContent = `Restarting to update in ${left}s…`;
+  }, 1000);
+  const close = toast('info', `Updating to Nimbus ${u.version}`, text, {
+    timeout: 0,
+    actions: [
+      { label: 'Restart now', run: () => { stop(); installUpdate(); } },
+      { label: 'Later', run: () => { stop(); autoUpdate.later = true; toast('info', 'Update saved for later', 'It installs next time you close Nimbus, or from Settings.'); } },
+    ],
+  });
+  function stop() {
+    clearInterval(tick);
+    autoUpdate.countdown = null;
+    close();
+  }
+  autoUpdate.countdown = { stop };
+}
+
+function onUpdateState(u) {
+  renderUpdatePill();
+  if (u.state === 'downloading' && u.version && autoUpdate.announced !== u.version) {
+    autoUpdate.announced = u.version;
+    autoUpdate.closeAnnounce = toast('info', `Nimbus ${u.version} is out`, 'Downloading it now — the launcher restarts into it when it is done.', { timeout: 6000 });
+  }
+  if (u.state === 'ready') {
+    autoUpdate.closeAnnounce?.();
+    autoUpdate.closeAnnounce = null;
+    maybeRestartForUpdate();
+  }
+}
+
+/** Says so once after the launcher restarts into a new version. */
+function announceNewVersion() {
+  try {
+    const now = store.update.current;
+    const before = localStorage.getItem('nimbus.lastVersion');
+    if (now && before && before !== now) toast('ok', `Updated to Nimbus ${now}`, 'You are on the newest version.', { timeout: 6000 });
+    if (now) localStorage.setItem('nimbus.lastVersion', now);
+  } catch { /* storage unavailable */ }
 }
 
 function renderUpdatePill() {
@@ -169,15 +269,12 @@ async function boot() {
   store.on('tasks', renderTaskPill);
   store.update = await api.updates.state().catch(() => ({ state: 'idle' }));
   renderUpdatePill();
-  store.on('update', (u) => {
-    renderUpdatePill();
-    if (u.state === 'ready') {
-      toast('info', `Nimbus ${u.version} is ready`, 'Restart to switch to the new version, or it installs next time you close the launcher.', {
-        timeout: 0,
-        actions: [{ label: 'Restart now', run: installUpdate }],
-      });
-    }
-  });
+  announceNewVersion();
+  store.on('update', onUpdateState);
+  // a finished game or download may be all a ready update was waiting for
+  store.on('game-state', () => setTimeout(maybeRestartForUpdate, 1500));
+  store.on('tasks', () => { if (!busyWith()) maybeRestartForUpdate(); });
+  if (store.update.state === 'ready') maybeRestartForUpdate();
   for (const t of await api.tasks.list()) store.tasks.set(t.id, t);
   renderTaskPill();
 

@@ -1,13 +1,8 @@
-import { h, icon, clear, stagger, instanceIcon, fmtAgo, fmtDuration, fmtNumber, LOADER_NAMES, fail } from '../ui.js';
+import { h, icon, clear, stagger, instanceIcon, fmtAgo, fmtDuration, fmtNumber, LOADER_NAMES, fail, liveProgress, taskProgress } from '../ui.js';
 import { api, store } from '../store.js';
 import { go, play } from '../router.js';
 import { openNewInstance } from '../newInstance.js';
 import { openProject } from '../project.js';
-
-function progressOf(t) {
-  if (!t || t.checking || !t.total) return null;
-  return t.totalBytes ? t.bytes / t.totalBytes : t.done / t.total;
-}
 
 function playButton(inst, { big = false } = {}) {
   const running = store.running.has(inst.id);
@@ -24,10 +19,25 @@ function playButton(inst, { big = false } = {}) {
   }, icon(running ? 'stop' : 'play'));
 }
 
-function instanceCard(inst) {
+/** Shows (or clears) a card's task progress without rebuilding the card. */
+function syncCardTask(card, inst) {
   const task = store.taskFor(inst.id);
-  const p = progressOf(task);
-  return h('div.inst-card', { dataset: { id: inst.id }, onclick: () => go('instance', { id: inst.id }) },
+  const slot = card.querySelector('.task-slot');
+  if (task) {
+    if (!card.lp) {
+      card.lp = liveProgress({ bar: 'bar', striped: false });
+      slot.replaceChildren(h('div.task-stage', card.lp.stage), card.lp.bar);
+    }
+    card.lp.update(task.stage, taskProgress(task));
+  } else if (card.lp) {
+    card.lp.dispose();
+    card.lp = null;
+    slot.replaceChildren();
+  }
+}
+
+function instanceCard(inst) {
+  const card = h('div.inst-card', { dataset: { id: inst.id }, onclick: () => go('instance', { id: inst.id }) },
     h('div.top', instanceIcon(inst),
       h('div', { style: { minWidth: 0 } },
         h('div.name', inst.name),
@@ -36,9 +46,10 @@ function instanceCard(inst) {
       h('span.tag', inst.mcVersion),
       h('span.tag.accent', LOADER_NAMES[inst.loader] || inst.loader),
       inst.boost ? h('span.tag.good', { icon: 'zap' }, 'Boosted') : null),
-    task ? h('div', h('div.sub', { style: { fontSize: '12px', marginBottom: '6px', color: 'var(--muted)' } }, task.stage),
-      h('div.bar', h('i', { style: { width: `${(p ?? 0.05) * 100}%` } }))) : null,
+    h('div.task-slot'),
     playButton(inst));
+  syncCardTask(card, inst);
+  return card;
 }
 
 export function render(page) {
@@ -57,8 +68,12 @@ export function render(page) {
     discover,
   );
 
+  let drawnHero = false;
   function drawHero() {
     clear(heroSlot);
+    // only the first draw slides in; later redraws (a launch, a game closing) stay put
+    heroSlot.classList.toggle('settled', drawnHero);
+    drawnHero = true;
     const inst = store.instances[0];
     if (!inst) {
       heroSlot.appendChild(h('div.hero',
@@ -85,25 +100,32 @@ export function render(page) {
         !inst.boost ? h('button.btn.ghost', { icon: 'zap', onclick: () => go('boost', { id: inst.id }) }, 'Boost FPS') : null)));
   }
 
+  let drawnGrid = false;
   function drawGrid() {
+    grid.querySelectorAll('.inst-card').forEach((c) => c.lp?.dispose());
     clear(grid);
+    grid.classList.toggle('settled', drawnGrid);
+    drawnGrid = true;
     for (const inst of store.instances) grid.appendChild(instanceCard(inst));
     grid.appendChild(h('div.inst-card.new', { onclick: () => openNewInstance() }, h('div.plus', icon('plus')), 'New instance'));
     stagger(grid);
     countEl.textContent = store.instances.length ? `· ${store.instances.length}` : '';
   }
 
-  // task progress only touches the card it belongs to, no full re-render
+  // task progress only touches the card it belongs to, and never rebuilds it
   function onTask(t) {
     if (!t.instanceId) return;
     const card = grid.querySelector(`.inst-card[data-id="${CSS.escape(t.instanceId)}"]`);
     const inst = store.instances.find((i) => i.id === t.instanceId);
-    if (card && inst) {
-      const fresh = instanceCard(inst);
-      fresh.style.animation = 'none';
-      card.replaceWith(fresh);
-    }
-    if (store.instances[0]?.id === t.instanceId && t.state !== 'running') drawHero();
+    if (card && inst) syncCardTask(card, inst);
+    if (store.instances[0]?.id === t.instanceId && t.state !== 'running') refreshHeroButton();
+  }
+
+  /** The big Play button is the only part of the hero that follows launches. */
+  function refreshHeroButton() {
+    const inst = store.instances[0];
+    const btn = heroSlot.querySelector('.hero .btn.play');
+    if (inst && btn) btn.replaceWith(playButton(inst, { big: true }));
   }
 
   async function importPack() {
@@ -138,7 +160,7 @@ export function render(page) {
   const offs = [
     store.on('instances', () => { drawHero(); drawGrid(); }),
     store.on('task', onTask),
-    store.on('launching', drawHero),
+    store.on('launching', refreshHeroButton),
   ];
   store.refreshInstances().catch(() => {});
   return () => offs.forEach((off) => off());
