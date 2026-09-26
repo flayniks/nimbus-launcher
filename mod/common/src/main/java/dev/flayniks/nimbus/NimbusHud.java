@@ -153,7 +153,7 @@ public final class NimbusHud {
 				: String.format(Locale.ROOT, "%02d:%02d", t.getHour(), t.getMinute());
 			return one(s, "");
 		}));
-		MODULES.add(text("ping", "Ping", "Your connection delay to the server", false, () -> one(String.valueOf(ping()), " ms")));
+		MODULES.add(text("ping", "Ping", "Your connection delay to the server", false, () -> one(ping(), " ms")));
 		MODULES.add(text("cps", "CPS", "Clicks per second, left and right", false, () -> List.of(new Line().add(String.valueOf(count(LEFT)), value()).add(" | ", label()).add(String.valueOf(count(RIGHT)), value()).add(" CPS", label()))));
 		MODULES.add(new Keystrokes());
 		MODULES.add(text("speed", "Speed", "How fast you are moving, in blocks per second", false, () -> one(String.format(Locale.ROOT, "%.2f", speed), " b/s")));
@@ -411,6 +411,7 @@ public final class NimbusHud {
 		try {
 			tick();
 			NimbusLan.tick();
+			GameStatus.frame();
 		} catch (Throwable ignored) {
 			// never let a helper break the HUD
 		}
@@ -477,6 +478,7 @@ public final class NimbusHud {
 		shortcutWasDown = shortcut;
 
 		Tweaks.frame(mc);
+		if (mc.level != null && NimbusConfig.on("hud.ping", false)) Ping.tick(mc);
 	}
 
 	private static boolean mouse(int button) {
@@ -532,15 +534,25 @@ public final class NimbusHud {
 		}
 	}
 
-	private static int ping() {
+	/** The measured round trip, else the tab list's number, "<1" on your own computer and "…" while waiting. */
+	private static String ping() {
+		int measured = Ping.value();
+		if (measured >= 0) return measured == 0 ? "<1" : String.valueOf(measured);
 		try {
 			Player p = mc().player;
-			if (p == null || mc().getConnection() == null) return 0;
+			if (p == null || mc().getConnection() == null) return "24";
 			var info = mc().getConnection().getPlayerInfo(p.getUUID());
-			return info == null ? 0 : info.getLatency();
+			if (info != null && info.getLatency() > 0) return String.valueOf(info.getLatency());
+			if (mc().getSingleplayerServer() != null) return "<1";
 		} catch (Throwable t) {
-			return 0;
+			// fall through
 		}
+		return "…";
+	}
+
+	/** The server answered a ping (PingMixin). */
+	public static void pong(Object packet) {
+		Ping.pong(packet);
 	}
 
 	private static long worldTime() {

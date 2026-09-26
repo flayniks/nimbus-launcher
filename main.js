@@ -13,10 +13,13 @@ let updater = null;
 let presence = null;
 let friends = null;
 let lan = null;
+let discord = null;
 const { Presence } = require('./src/core/presence');
 const { readJson, writeJson } = require('./src/core/util');
 const { Friends } = require('./src/core/friends');
 const { Lan } = require('./src/core/lan');
+const { DiscordStatus } = require('./src/core/discord');
+const { services } = require('./src/core/services');
 
 // a separate data folder (tests, or a second profile) is a separate launcher with its own lock
 if (process.env.NIMBUS_DATA_DIR) app.setPath('userData', path.join(process.env.NIMBUS_DATA_DIR, '.electron'));
@@ -336,7 +339,11 @@ function registerIpc() {
   });
 
   handle('settings:get', () => launcher.getSettings());
-  handle('settings:set', (patch) => launcher.setSettings(patch));
+  handle('settings:set', async (patch) => {
+    const out = await launcher.setSettings(patch);
+    if ('discordStatus' in patch || 'discordServer' in patch) discord?.poke(0);
+    return out;
+  });
   handle('versions:list', () => launcher.listVersions());
   handle('loaders:games', (kind) => launcher.loaderGameVersions(kind));
   handle('loaders:versions', (kind, mc) => launcher.loaderVersions(kind, mc));
@@ -634,6 +641,20 @@ app.whenReady().then(async () => {
   lan.on('state', (st) => send('lan:state', st));
   if (process.env.NIMBUS_DATA_DIR) global.nimbusLan = lan; // tests reach in here
   await lan.startBridge().catch(() => {});
+  discord = new DiscordStatus({
+    launcher,
+    lan,
+    version: app.getVersion(),
+    config: async () => {
+      const s = await services();
+      return { clientId: process.env.NIMBUS_DISCORD_ID || s.discord || null, image: s.discordImage, site: s.site };
+    },
+  });
+  launcher.on('game-state', () => discord.poke());
+  lan.on('state', () => discord.poke());
+  lan.on('game-status', () => discord.poke());
+  discord.start();
+  if (process.env.NIMBUS_DATA_DIR) global.nimbusDiscord = discord;
   ipcMain.on('net:event', (e, msg) => { if (netWin && e.sender === netWin.webContents) lan.netEvent(msg); });
   registerIpc();
   createWindow();
@@ -641,6 +662,15 @@ app.whenReady().then(async () => {
   // check on every start, as soon as the window is up
   if (updater) win.webContents.once('did-finish-load', () => setTimeout(() => checkForUpdates(), 1200));
   app.on('activate', () => { if (!win) createWindow(); });
+});
+
+// clear the Discord status on the way out, so it doesn't linger until Discord notices
+let discordCleared = false;
+app.on('before-quit', (e) => {
+  if (discordCleared || !discord?.ipc) return;
+  e.preventDefault();
+  discordCleared = true;
+  Promise.race([discord.stop(), new Promise((r) => setTimeout(r, 800))]).finally(() => app.quit());
 });
 
 app.on('window-all-closed', () => {

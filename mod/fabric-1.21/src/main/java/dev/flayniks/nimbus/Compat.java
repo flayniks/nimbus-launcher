@@ -33,6 +33,11 @@ public final class Compat {
 	private Compat() {
 	}
 
+	/** Minecraft's own millisecond clock (the one its ping chart uses). */
+	public static long millis() {
+		return net.minecraft.Util.getMillis();
+	}
+
 	public static boolean keyDown(int key) {
 		try {
 			return GLFW.glfwGetKey(Minecraft.getInstance().getWindow().getWindow(), key) == GLFW.GLFW_PRESS;

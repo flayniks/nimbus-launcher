@@ -609,3 +609,88 @@ test('friends service: Mojang sign-in, friend requests, presence, chat and the r
   await call('friends/remove', { uuid: people.steve }, alex.token);
   assert.equal((await call('beat', {}, alex.token)).friends.length, 0);
 });
+
+test('discord: what the status says in the launcher, in menus, in worlds and on servers', () => {
+  const { activityFor, shownServer } = require('../src/core/discord');
+  const game = { instance: { mcVersion: '1.21.1', loader: 'fabric' }, started: 1000 };
+  const idle = activityFor({ version: '1.5.2', game: null, status: null, since: 5 });
+  assert.equal(idle.details, 'In the launcher');
+  assert.equal(idle.timestamps.start, 5);
+  assert.equal(idle.assets.large_text, 'Nimbus Launcher 1.5.2');
+  assert.equal(idle.buttons[0].label, 'Get Nimbus Launcher');
+  const vanilla = activityFor({ version: '1', game: { instance: { mcVersion: '1.20.4', loader: 'vanilla' }, started: 7 }, status: null });
+  assert.deepEqual([vanilla.details, vanilla.state, vanilla.timestamps.start], ['Playing Minecraft', 'Minecraft 1.20.4', 7]);
+  assert.equal(activityFor({ version: '1', game, status: { where: 'menu' } }).details, 'In the menus');
+  assert.equal(activityFor({ version: '1', game, status: { where: 'menu' } }).state, 'Minecraft 1.21.1 · Fabric');
+  assert.equal(activityFor({ version: '1', game, status: { where: 'singleplayer' } }).details, 'Playing singleplayer');
+  assert.equal(activityFor({ version: '1', game, status: { where: 'singleplayer', lan: true } }).details, 'Hosting a world on Nimbus LAN');
+  assert.equal(activityFor({ version: '1', game, status: { where: 'multiplayer', server: 'MC.Hypixel.net:25565' } }).details, 'Playing on mc.hypixel.net');
+  assert.equal(activityFor({ version: '1', game, status: { where: 'multiplayer', server: 'mc.hypixel.net' }, showServer: false }).details, 'Playing multiplayer');
+  assert.equal(activityFor({ version: '1', game, status: { where: 'multiplayer', server: '127.0.0.1:50123' }, lan: { joining: { status: 'playing', name: 'Alex' } } }).details, "In Alex's world on Nimbus LAN");
+  // addresses that would give away where someone lives stay hidden
+  for (const a of ['192.168.1.20', '85.10.4.1:25565', 'localhost', '[::1]:25565', 'myserver', 'box.local', '2001:db8::1']) assert.equal(shownServer(a), null, a);
+  assert.equal(shownServer('play.example.org'), 'play.example.org');
+});
+
+test('discord: talks to the Discord app over its local socket, and clears the status on stop', async () => {
+  const net = require('net');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nimbus-discord-'));
+  const sockPath = path.join(dir, 'discord-ipc-0');
+  const got = [];
+  const server = net.createServer((sock) => {
+    let buf = Buffer.alloc(0);
+    sock.on('data', (d) => {
+      buf = Buffer.concat([buf, d]);
+      while (buf.length >= 8 && buf.length >= 8 + buf.readInt32LE(4)) {
+        const op = buf.readInt32LE(0);
+        const len = buf.readInt32LE(4);
+        const msg = JSON.parse(buf.subarray(8, 8 + len).toString());
+        buf = buf.subarray(8 + len);
+        got.push({ op, msg });
+        const reply = (data) => {
+          const body = Buffer.from(JSON.stringify(data));
+          const head = Buffer.alloc(8);
+          head.writeInt32LE(1, 0);
+          head.writeInt32LE(body.length, 4);
+          sock.write(Buffer.concat([head, body]));
+        };
+        if (op === 0) reply({ cmd: 'DISPATCH', evt: 'READY', data: { v: 1 } });
+        else reply({ cmd: msg.cmd, nonce: msg.nonce, data: msg.args.activity });
+      }
+    });
+  });
+  await new Promise((r) => server.listen(sockPath, r));
+  process.env.NIMBUS_DISCORD_IPC = sockPath;
+  try {
+    const { DiscordStatus } = require('../src/core/discord');
+    const running = new Map();
+    const launcher = { settings: { discordStatus: true, discordServer: true }, running };
+    const lan = { gameStatus: null, state: () => ({ hosting: null, joining: null }) };
+    const d = new DiscordStatus({ launcher, lan, version: '9.9.9', config: async () => ({ clientId: '123' }) });
+    await d.refresh();
+    assert.deepEqual(got[0], { op: 0, msg: { v: 1, client_id: '123' } });
+    assert.equal(got[1].msg.cmd, 'SET_ACTIVITY');
+    assert.equal(got[1].msg.args.pid, process.pid);
+    assert.equal(got[1].msg.args.activity.details, 'In the launcher');
+    // nothing changed: nothing sent
+    await d.refresh();
+    assert.equal(got.length, 2);
+    // a game on a server (after Discord's rate limit gap)
+    running.set('a', { instance: { mcVersion: '1.21.1', loader: 'quilt' }, started: Date.now() });
+    lan.gameStatus = { where: 'multiplayer', server: 'play.example.org' };
+    d.sentAt = 0;
+    await d.refresh();
+    assert.equal(got[2].msg.args.activity.details, 'Playing on play.example.org');
+    assert.equal(got[2].msg.args.activity.state, 'Minecraft 1.21.1 · Quilt');
+    // switched off in settings: the status is cleared
+    launcher.settings.discordStatus = false;
+    await d.refresh();
+    assert.equal(got[3].msg.args.activity, null);
+    assert.equal(d.ipc, null);
+    await d.stop();
+  } finally {
+    delete process.env.NIMBUS_DISCORD_IPC;
+    server.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

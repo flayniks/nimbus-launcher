@@ -39,7 +39,9 @@ class Lan extends EventEmitter {
     this.seq = 0;
     friends.on('message', (m) => this.onMessage(m).catch(() => {}));
     launcher.on('game-state', (e) => {
-      if (!e.running && launcher.running.size === 0 && this.hosting) this.stopHosting();
+      if (e.running || launcher.running.size > 0) return;
+      this.gameStatus = null;
+      if (this.hosting) this.stopHosting();
     });
   }
 
@@ -81,6 +83,20 @@ class Lan extends EventEmitter {
     }
     if (action === 'unhost' && req.method === 'POST') {
       this.stopHosting();
+      return reply({ ok: true });
+    }
+    if (action === 'status' && req.method === 'POST') {
+      // where Nimbus Core says you are, for the Discord status
+      const where = ['menu', 'singleplayer', 'multiplayer'].includes(body.where) ? body.where : 'menu';
+      this.gameStatus = {
+        where,
+        server: typeof body.server === 'string' ? body.server.slice(0, 120) : null,
+        world: typeof body.world === 'string' ? body.world.slice(0, 60) : null,
+        lan: Boolean(body.lan),
+      };
+      // the hosted world is gone (left, or another world opened): friends shouldn't see it any more
+      if (this.hosting && (where !== 'singleplayer' || !this.gameStatus.lan)) this.stopHosting();
+      this.emit('game-status', this.gameStatus);
       return reply({ ok: true });
     }
     if (action === 'events') {

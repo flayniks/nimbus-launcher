@@ -6,8 +6,8 @@
 const EventEmitter = require('events');
 const path = require('path');
 const { readJson, writeJson } = require('./util');
+const { services } = require('./services');
 
-const SERVICES_URL = 'https://raw.githubusercontent.com/flayniks/nimbus-launcher/main/services.json';
 const DEFAULT_API = 'https://nimbus-launcher.netlify.app/api';
 const SLOW = 15_000;
 const FAST = 2_500;
@@ -44,16 +44,8 @@ class Friends extends EventEmitter {
   /** Where the service lives: an override, then the address published in the repo, then the default. */
   async apiBase() {
     if (process.env.NIMBUS_FRIENDS_URL) return process.env.NIMBUS_FRIENDS_URL.replace(/\/+$/, '');
-    if (this.base && Date.now() - this.baseAt < 6 * 3600_000) return this.base;
-    try {
-      const r = await fetch(SERVICES_URL, { signal: AbortSignal.timeout(6000) });
-      if (r.ok) {
-        const s = await r.json();
-        if (s.friends) this.base = String(s.friends).replace(/\/+$/, '');
-      }
-    } catch { /* offline or blocked: keep what we had */ }
-    this.base = this.base || DEFAULT_API;
-    this.baseAt = Date.now();
+    const s = await services();
+    this.base = String(s.friends || DEFAULT_API).replace(/\/+$/, '');
     return this.base;
   }
 

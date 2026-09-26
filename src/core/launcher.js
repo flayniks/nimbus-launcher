@@ -43,6 +43,8 @@ const DEFAULT_SETTINGS = {
   uiScale: 100,
   sidebarLabels: false,
   showCounter: true,
+  discordStatus: true, // what you're playing, on your Discord profile
+  discordServer: true, // include the server's name (never an IP address)
   shareOnline: true,
   countedInstall: false,
   // animations: launcher

@@ -29,7 +29,7 @@ const BACKGROUNDS = [
 ];
 
 const SECTIONS = [
-  ['general', 'General', 'settings', 'Updates, what happens when you play, and storage.'],
+  ['general', 'General', 'settings', 'Updates, what happens when you play, Discord and storage.'],
   ['appearance', 'Appearance', 'palette', 'Make Nimbus look the way you like.'],
   ['animations', 'Animations', 'sparkles', 'Every animation, in the launcher, the launch splash and the game.'],
   ['downloads', 'Downloads', 'download', 'How Nimbus fetches files.'],
@@ -140,6 +140,10 @@ export function render(page) {
       card(
         row('When the game starts', 'Hiding the launcher frees memory and GPU time for Minecraft.'),
         h('div.setting', seg('onLaunch', [['hide', 'Hide launcher'], ['keep', 'Keep open'], ['close', 'Close launcher']], 'hide'))),
+      h('div.group-title', 'Discord'),
+      card(
+        row('Show what I’m playing', 'Your Discord profile shows Nimbus, the Minecraft version and how long you’ve played. Needs the Discord app open on this computer.', onOff('discordStatus')),
+        row('Show the server', 'Adds the server’s name, like “Playing on mc.hypixel.net”. IP addresses and your own computer are never shown.', onOff('discordServer'))),
       h('div.group-title', 'Player counter'),
       card(
         row('Show the counter', 'How many people have Nimbus open, are playing, and have installed it — at the top of the window.', onOff('showCounter')),
@@ -302,7 +306,7 @@ export function render(page) {
       h('div.group-title', 'Accent colour'), card(h('div.setting', accents)),
       h('div.group-title', 'Background'), bgs, dropZone, bgExtra,
       h('div.group-title', 'Game menus'),
-      h('p.lead', { style: { margin: '0', color: 'var(--muted)', fontSize: '12.5px' } }, 'Behind Minecraft\u2019s title screen and menus, for Fabric and Quilt instances. You can also change it in game: Nimbus Features \u2192 Utilities.'),
+      h('p.lead', { style: { margin: '0', color: 'var(--muted)', fontSize: '12.5px' } }, 'Behind Minecraft’s title screen and menus, for Fabric and Quilt instances. You can also change it in game: Nimbus Features \u2192 Utilities.'),
       menuCards, menuExtra,
       h('div.group-title', 'Surfaces'),
       card(

@@ -10,6 +10,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
 
@@ -35,6 +36,8 @@ public final class NimbusLan {
 	private static volatile String notice;
 	private static volatile long noticeUntil;
 	private static volatile Thread poller;
+	/** The world's server when it was opened: a new one means you left and came back. */
+	private static Object hostedServer;
 	private static boolean yWas;
 	private static boolean nWas;
 
@@ -60,14 +63,16 @@ public final class NimbusLan {
 		body.addProperty("mc", System.getProperty("nimbus.mc", ""));
 		body.addProperty("loader", System.getProperty("nimbus.loader", ""));
 		post("host", body);
+		hostedServer = Minecraft.getInstance().getSingleplayerServer();
 		hosting = true;
-		notice("Your world is on Nimbus LAN · friends can ask to join from their launcher", 8000);
+		notice("Your world is on Nimbus LAN", 8000);
 		startPoller();
 	}
 
 	static void stop() {
 		if (!hosting) return;
 		hosting = false;
+		hostedServer = null;
 		ASKS.clear();
 		post("unhost", new JsonObject());
 	}
@@ -119,7 +124,7 @@ public final class NimbusLan {
 		if (!allow) notice("Told " + ask.name + " no", 3000);
 	}
 
-	private static void post(String action, JsonObject body) {
+	static void post(String action, JsonObject body) {
 		if (!available()) return;
 		HttpRequest req = HttpRequest.newBuilder(URI.create(BRIDGE + "/" + action)).timeout(Duration.ofSeconds(3))
 			.POST(HttpRequest.BodyPublishers.ofString(body.toString())).header("content-type", "application/json").build();
@@ -131,9 +136,24 @@ public final class NimbusLan {
 		noticeUntil = System.currentTimeMillis() + ms;
 	}
 
+	/**
+	 * Stops hosting once the world it opened has closed. Runs from menus too (ScreenFxMixin):
+	 * the HUD isn't drawn while you leave a world, so checking only there missed it, and the
+	 * world stayed "on Nimbus LAN" after you came back.
+	 */
+	public static void watch() {
+		if (!hosting) return;
+		try {
+			Object now = Minecraft.getInstance().getSingleplayerServer();
+			if (now == null || now != hostedServer) stop();
+		} catch (Throwable ignored) {
+			// leave it
+		}
+	}
+
 	/** Every frame: keys for the question, and noticing when the world closes. */
 	static void tick() {
-		if (hosting && !Compat.inSingleplayer()) stop();
+		watch();
 		long now = System.currentTimeMillis();
 		ASKS.removeIf((a) -> now - a.at > ASK_SECONDS * 1000L);
 		Ask ask = ASKS.peekFirst();
@@ -165,7 +185,10 @@ public final class NimbusLan {
 		}
 		int w = Math.max(c.textWidth(title), line == null ? 0 : c.textWidth(line)) + 44;
 		int h = line == null ? 24 : 34;
-		int x = (c.width() - w) / 2;
+		// in the pause menu, stay clear of the Nimbus buttons down the left side
+		int minX = Compat.screen() != null ? 110 : 4;
+		int x = Math.max(minX, (c.width() - w) / 2);
+		if (x + w > c.width() - 4) x = Math.max(4, c.width() - 4 - w);
 		int y = 8;
 		float pulse = ask != null ? 0.5f + 0.5f * (float) Math.sin(now / 180.0) : 0f;
 		c.rect(x - 1, y - 1, x + w + 1, y + h + 1, NimbusArt.argb(NimbusArt.mix(0x7C5CFF, 0xF472B6, pulse), 0.9f));
