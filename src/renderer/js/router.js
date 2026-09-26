@@ -1,6 +1,7 @@
 // Page switching and the Play action, shared by every page.
 import { h, icon, fail, info } from './ui.js';
 import { api, store } from './store.js';
+import * as look from './look.js';
 
 let PAGES = {};
 
@@ -71,6 +72,5 @@ export async function play(id) {
 }
 
 export function applyLook(s) {
-  document.documentElement.dataset.accent = s.accent || 'violet';
-  document.body.classList.toggle('no-anim', s.animations === false);
+  look.applyLook(s);
 }

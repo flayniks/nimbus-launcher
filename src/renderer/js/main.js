@@ -9,6 +9,7 @@ import * as settings from './pages/settings.js';
 import * as instance from './pages/instance.js';
 import * as skins from './pages/skins.js';
 import { head as skinHead } from './skinart.js';
+import { presencePill } from './look.js';
 
 registerPages({ home, browse, boost, accounts, settings, instance, skins });
 
@@ -225,6 +226,8 @@ function buildShell() {
   if (api.platform === 'darwin') document.body.classList.add('mac');
 
   const ringSvg = '<svg class="ring" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="2.4"/><circle class="v" cx="9" cy="9" r="7" fill="none" stroke="url(#g-accent)" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="44" stroke-dashoffset="44" transform="rotate(-90 9 9)" style="transition:stroke-dashoffset .3s"/></svg>';
+  const presence = presencePill();
+  store.presence = presence;
   const pill = h('button.task-pill.no-drag', { onclick: openDock, title: 'Downloads and tasks' });
   pill.innerHTML = ringSvg;
   pill.appendChild(h('span.lbl', ''));
@@ -232,6 +235,7 @@ function buildShell() {
   app.append(
     h('header.titlebar',
       h('div.brand', h('span.mark', icon('logo')), 'Nimbus', h('small', 'Launcher')),
+      h('div.center', presence),
       h('div.spacer'),
       h('button.update-pill.no-drag', { onclick: installUpdate }),
       pill,

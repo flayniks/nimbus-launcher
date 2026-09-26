@@ -42,22 +42,24 @@ public abstract class LoadingOverlayMixin {
 	 */
 	@ModifyExpressionValue(method = "extractRenderState", at = @At(value = "INVOKE", target = "Ljava/util/function/IntSupplier;getAsInt()I"), require = 0)
 	private int nimbus$background(int color) {
-		return 0xFF000000 | NimbusArt.BG;
+		return NimbusArt.LOADING ? 0xFF000000 | NimbusArt.BG : color;
 	}
 
 	/** extractRenderState()'s float locals are partialTick, fade-out, fade-in, then the logo's opacity: zero that last one. */
 	@ModifyVariable(method = "extractRenderState", at = @At("STORE"), ordinal = 3, require = 0)
 	private float nimbus$hideLogo(float logoAlpha) {
-		return nimbus$safeMode ? logoAlpha : 0f;
+		return nimbus$safeMode || !NimbusArt.LOADING ? logoAlpha : 0f;
 	}
 
 	@Inject(method = "extractProgressBar", at = @At("HEAD"), cancellable = true, require = 0)
 	private void nimbus$hideBar(GuiGraphicsExtractor graphics, int x1, int y1, int x2, int y2, float alpha, CallbackInfo ci) {
-		ci.cancel();
+		if (NimbusArt.LOADING) ci.cancel();
 	}
 
 	@Inject(method = "extractRenderState", at = @At("TAIL"), require = 0)
 	private void nimbus$draw(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick, CallbackInfo ci) {
+		// Settings → Animations → "Nimbus loading screen" off: leave Mojang\'s screen alone
+		if (!NimbusArt.LOADING) return;
 		// vanilla's Util.getMillis() is System.nanoTime() in milliseconds
 		long now = System.nanoTime() / 1_000_000L;
 		if (nimbus$born < 0) nimbus$born = now;

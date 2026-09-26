@@ -1,5 +1,6 @@
 package dev.flayniks.nimbus;
 
+import com.mojang.blaze3d.vertex.PoseStack;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Method;
@@ -50,6 +51,51 @@ public final class GuiCanvas implements Canvas {
 	@Override
 	public int textWidth(String s) {
 		return Minecraft.getInstance().font.width(s);
+	}
+
+	/**
+	 * GuiGraphics.pose() hands back a PoseStack up to 1.21.5 and a 2D JOML matrix stack after,
+	 * so it is found by reflection and both kinds are handled.
+	 */
+	private static Method pose;
+	private static boolean poseLooked;
+
+	private static Object pose(GuiGraphics g) {
+		if (!poseLooked) {
+			poseLooked = true;
+			for (Method m : GuiGraphics.class.getMethods()) {
+				if (m.getParameterCount() != 0) continue;
+				Class<?> r = m.getReturnType();
+				if (r == PoseStack.class || r.getName().equals("org.joml.Matrix3x2fStack")) {
+					pose = m;
+					break;
+				}
+			}
+		}
+		try {
+			return pose == null ? null : pose.invoke(g);
+		} catch (ReflectiveOperationException e) {
+			return null;
+		}
+	}
+
+	@Override
+	public void push(float x, float y, float scale) {
+		Object p = pose(g);
+		if (p instanceof PoseStack ps) {
+			ps.pushPose();
+			ps.translate(x, y, 0f);
+			ps.scale(scale, scale, 1f);
+		} else if (p != null) {
+			Matrix2D.push(p, x, y, scale);
+		}
+	}
+
+	@Override
+	public void pop() {
+		Object p = pose(g);
+		if (p instanceof PoseStack ps) ps.popPose();
+		else if (p != null) Matrix2D.pop(p);
 	}
 
 	/**

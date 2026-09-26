@@ -10,6 +10,8 @@ const UPDATE_EVERY = 4 * 60 * 60 * 1000;
 let win = null;
 let launcher = null;
 let updater = null;
+let presence = null;
+const { Presence } = require('./src/core/presence');
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -79,11 +81,23 @@ const LOADER_NAMES = { vanilla: 'Minecraft', fabric: 'Fabric', quilt: 'Quilt', f
  * install/launch task first, then the game log, and bows out when the game opens its window.
  */
 class LaunchSplash {
-  constructor(inst, accent) {
+  constructor(inst, settings = {}) {
     this.closed = false;
     const kind = `${LOADER_NAMES[inst.loader] || 'Minecraft'} ${inst.mcVersion}`;
     this.inst = inst;
-    this.pending = { instance: inst.name.includes(inst.mcVersion) ? inst.name : `${inst.name} · ${kind}`, stage: 'Getting ready', progress: null, accent };
+    this.pending = {
+      instance: inst.name.includes(inst.mcVersion) ? inst.name : `${inst.name} · ${kind}`,
+      stage: 'Getting ready',
+      progress: null,
+      accent: settings.accent,
+      look: {
+        a1: settings.accent === 'custom' ? settings.customA1 : null,
+        a2: settings.accent === 'custom' ? settings.customA2 : null,
+        particles: settings.splashParticles !== false,
+        style: settings.splashStyle || 'cube',
+        still: settings.animations === false,
+      },
+    };
     this.win = new BrowserWindow({
       width: 440,
       height: 400,
@@ -316,6 +330,21 @@ function registerIpc() {
   handle('content:list', (id) => launcher.instances.listContent(id));
   handle('content:toggle', (id, rel, enabled) => launcher.instances.setContentEnabled(id, rel, enabled));
   handle('content:remove', (id, rel) => launcher.instances.removeContent(id, rel));
+  handle('content:addFiles', async (id, type, paths) => {
+    let files = Array.isArray(paths) ? paths.filter((p) => typeof p === 'string' && p) : [];
+    if (!files.length) {
+      const pick = {
+        mod: { title: 'Add mods', name: 'Mods', extensions: ['jar'] },
+        resourcepack: { title: 'Add resource packs', name: 'Resource packs', extensions: ['zip'] },
+        shader: { title: 'Add shader packs', name: 'Shader packs', extensions: ['zip'] },
+      }[type];
+      if (!pick) throw new Error('Pick Mods, Resource Packs or Shaders first.');
+      const res = await dialog.showOpenDialog(win, { title: pick.title, properties: ['openFile', 'multiSelections'], filters: [{ name: pick.name, extensions: pick.extensions }] });
+      if (res.canceled) return { added: [], skipped: [] };
+      files = res.filePaths;
+    }
+    return launcher.addContentFiles(id, type, files);
+  });
   handle('content:identify', (id) => modrinth.identifyContent({ paths: launcher.paths }, launcher.instances, id));
   handle('content:updates', async (id) => modrinth.checkUpdates({ paths: launcher.paths }, launcher.instances, await launcher.instances.get(id)));
   handle('content:update', (id, items) => launcher.updateContent(id, items));
@@ -323,7 +352,7 @@ function registerIpc() {
   handle('game:launch', async (id) => {
     const mode = launcher.settings.onLaunch;
     const inst = await launcher.instances.get(id);
-    const splash = launcher.settings.splash !== false ? new LaunchSplash(inst, launcher.settings.accent) : null;
+    const splash = launcher.settings.splash !== false ? new LaunchSplash(inst, launcher.settings) : null;
     const onTask = (t) => {
       if (t.instanceId !== id || t.state !== 'running') return;
       const progress = t.checking || !t.total ? null : t.totalBytes ? t.bytes / t.totalBytes : t.done / t.total;
@@ -412,6 +441,36 @@ function registerIpc() {
   handle('cache:clear', () => launcher.clearCache());
   handle('data:open', async () => { await shell.openPath(launcher.paths.root); });
   handle('tasks:list', () => launcher.listTasks());
+  // player counter, cached for half a minute
+  let statsCache = null;
+  handle('presence:stats', async () => {
+    if (statsCache && Date.now() - statsCache.at < 30000) return statsCache.data;
+    const data = await presence.stats();
+    statsCache = { at: Date.now(), data };
+    return data;
+  });
+  // a background picture of your own
+  handle('look:pickBackground', async () => {
+    const res = await dialog.showOpenDialog(win, { title: 'Pick a background picture', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }] });
+    if (res.canceled || !res.filePaths[0]) return launcher.getSettings();
+    const src = res.filePaths[0];
+    const stat = await require('fs').promises.stat(src);
+    if (stat.size > 12 * 1024 * 1024) throw new Error('That picture is over 12 MB. Pick a smaller one.');
+    const dest = path.join(launcher.paths.root, `background${path.extname(src).toLowerCase()}`);
+    await require('fs').promises.copyFile(src, dest);
+    backgroundCache = null;
+    return launcher.setSettings({ background: 'image', bgImage: dest });
+  });
+  let backgroundCache = null;
+  handle('look:background', async () => {
+    const file = launcher.settings.bgImage;
+    if (!file) return null;
+    if (backgroundCache?.file === file) return backgroundCache.url;
+    const buf = await require('fs').promises.readFile(file);
+    const ext = path.extname(file).slice(1).replace('jpg', 'jpeg');
+    backgroundCache = { file, url: `data:image/${ext};base64,${buf.toString('base64')}` };
+    return backgroundCache.url;
+  });
   handle('update:state', () => ({ ...updates, current: app.getVersion() }));
   handle('update:check', async () => {
     if (!updater) throw new Error(updates.message || 'Updates are not available here.');
@@ -447,6 +506,12 @@ app.whenReady().then(async () => {
     // back from a long session: see whether a new version came out meanwhile
     checkForUpdates(30 * 60 * 1000);
   });
+  presence = new Presence({
+    settings: () => launcher.settings,
+    save: (patch) => launcher.setSettings(patch),
+    playing: () => launcher.running.size > 0,
+  });
+  presence.start();
   registerIpc();
   createWindow();
   updater = setupUpdater();

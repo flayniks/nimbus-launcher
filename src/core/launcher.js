@@ -18,6 +18,8 @@ const boost = require('./boost');
 const { readJson, writeJson, exists } = require('./util');
 const { LogParser } = require('./logparse');
 const { Builtin } = require('./builtin');
+const packs = require('./packs');
+const { CONTENT_DIRS } = require('./instances');
 const skins = require('./skins');
 
 const DEFAULT_SETTINGS = {
@@ -26,6 +28,39 @@ const DEFAULT_SETTINGS = {
   animations: true,
   splash: true,
   accent: 'violet',
+  // appearance
+  theme: 'midnight', // midnight | void | nebula | ocean | forest | ember
+  customA1: '#7c5cff',
+  customA2: '#c084fc',
+  background: 'aurora', // aurora | stars | grid | solid | image
+  bgImage: null,
+  bgBlur: 8,
+  bgDim: 45,
+  glass: true,
+  glassBlur: 16,
+  cardStyle: 'glass', // glass | solid | outline
+  radius: 'rounded', // sharp | rounded | round
+  uiScale: 100,
+  sidebarLabels: false,
+  showCounter: true,
+  shareOnline: true,
+  countedInstall: false,
+  // animations: launcher
+  animSpeed: 'normal', // relaxed | normal | snappy
+  pageTransition: 'rise', // rise | fade | slide | zoom | none
+  stagger: true,
+  hoverEffect: 'lift', // lift | tilt | glow | none
+  bgMotion: true,
+  // animations: launch splash
+  splashParticles: true,
+  splashStyle: 'cube', // cube | minimal
+  // animations: in game (Nimbus Core)
+  gameLoading: true,
+  gameParticles: true,
+  gameCube: true,
+  gameAnimSpeed: 'normal', // relaxed | normal | snappy
+  gameBadge: true,
+  gameMenuMotion: true,
   msClientId: '',
   clientToken: null,
 };
@@ -68,7 +103,10 @@ class Launcher extends EventEmitter {
     const allowed = Object.keys(DEFAULT_SETTINGS).filter((k) => k !== 'clientToken');
     for (const k of allowed) if (k in patch) this.settings[k] = patch[k];
     this.settings.concurrency = Math.max(2, Math.min(64, Number(this.settings.concurrency) || 16));
-    await writeJson(this.paths.settings, this.settings);
+    // one write at a time, so an older snapshot can never land after a newer one
+    const snapshot = { ...this.settings };
+    this.settingsWrite = (this.settingsWrite || Promise.resolve()).catch(() => {}).then(() => writeJson(this.paths.settings, snapshot));
+    await this.settingsWrite;
     return this.getSettings();
   }
 
@@ -199,6 +237,12 @@ class Launcher extends EventEmitter {
     }
 
     await this.builtin.ensure(paths, this.instances, instance);
+    // packs added since last time are switched on, so they are simply there in game
+    await packs.enableNewPacks({
+      gameDir: paths.gameDir(instance.id),
+      mcVersion: instance.mcVersion,
+      stateFile: path.join(paths.instanceDir(instance.id), 'packs-seen.json'),
+    }).catch(() => {});
 
     stage('Downloading game files');
     const version = await resolveVersion(paths, versionId);
@@ -237,6 +281,18 @@ class Launcher extends EventEmitter {
       const extraJvm = boost.launchJvmFlags({ instance: inst, javaMajor: prep.java.major, modCount });
       // Nimbus Core's in-game Skins & Capes menu shares the launcher's wardrobe
       extraJvm.push(`-Dnimbus.wardrobe=${this.wardrobe.dir}`);
+      // one Nimbus Features setup for every instance, and the animation choices from Settings
+      extraJvm.push(`-Dnimbus.features=${path.join(this.paths.root, 'nimbus-features.json')}`);
+      const st = this.settings;
+      const anim = {
+        loading: st.gameLoading !== false,
+        particles: st.gameParticles !== false,
+        cube: st.gameCube !== false,
+        badge: st.gameBadge !== false,
+        menus: st.gameMenuMotion !== false,
+        speed: { relaxed: 0.6, normal: 1, snappy: 1.6 }[st.gameAnimSpeed] || 1,
+      };
+      for (const [k, v] of Object.entries(anim)) extraJvm.push(`-Dnimbus.anim.${k}=${v}`);
       // tests swap Mojang and the gallery for local stand-ins
       for (const [env, prop] of [['NIMBUS_SERVICES_URL', 'services'], ['NIMBUS_MOJANG_URL', 'mojang'], ['NIMBUS_GALLERY_URL', 'gallery'], ['NIMBUS_TEXTURES_URL', 'textures']]) {
         if (process.env[env]) extraJvm.push(`-Dnimbus.${prop}=${process.env[env]}`);
@@ -329,6 +385,36 @@ class Launcher extends EventEmitter {
       this.installInstance(inst.id).catch(() => {});
       return inst;
     });
+  }
+
+  /** Copies files the player picked (or dropped) into the right folder for their kind. */
+  async addContentFiles(instanceId, type, files) {
+    const dir = CONTENT_DIRS[type];
+    if (!dir) throw new Error('Pick Mods, Resource Packs or Shaders first.');
+    const wanted = type === 'mod' ? /\.jar$/i : /\.zip$/i;
+    const target = path.join(this.paths.gameDir(instanceId), dir);
+    await fsp.mkdir(target, { recursive: true });
+    const added = [];
+    const skipped = [];
+    for (const file of files || []) {
+      const name = path.basename(String(file));
+      let stat = null;
+      try { stat = await fsp.stat(file); } catch { /* gone */ }
+      // shader and resource packs may also be plain folders
+      const folderPack = stat?.isDirectory() && type !== 'mod';
+      if (!stat || (!folderPack && !wanted.test(name))) {
+        skipped.push({ name, reason: type === 'mod' ? 'Mods are .jar files' : 'Packs are .zip files or folders' });
+        continue;
+      }
+      const dest = path.join(target, name);
+      if (folderPack) await fsp.cp(file, dest, { recursive: true, force: true });
+      else await fsp.copyFile(file, dest);
+      await this.instances.recordContent(instanceId, `${dir}/${name}`, {
+        title: name.replace(/\.(jar|zip)$/i, ''), type, source: 'file', added: Date.now(),
+      });
+      added.push(name);
+    }
+    return { added, skipped };
   }
 
   async updateContent(instanceId, items) {

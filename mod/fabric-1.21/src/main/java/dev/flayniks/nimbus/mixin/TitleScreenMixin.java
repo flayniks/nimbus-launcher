@@ -2,6 +2,7 @@ package dev.flayniks.nimbus.mixin;
 
 import dev.flayniks.nimbus.GuiCanvas;
 import dev.flayniks.nimbus.NimbusArt;
+import dev.flayniks.nimbus.NimbusHud;
 import dev.flayniks.nimbus.SkinsScreen;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -14,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** The Nimbus badge in the top-left corner and a Skins & Capes button in the top-right. */
+/** The Nimbus badge in the top-left corner, and Skins & Capes and Nimbus Features buttons in the top-right. */
 @Mixin(TitleScreen.class)
 public abstract class TitleScreenMixin extends Screen {
 	@Unique private long nimbus$shown = -1L;
@@ -28,6 +29,9 @@ public abstract class TitleScreenMixin extends Screen {
 		Screen self = this;
 		this.addRenderableWidget(Button.builder(Component.literal("Skins & Capes"), b -> SkinsScreen.open(self))
 			.bounds(this.width - 104, 6, 98, 20).build());
+		// side by side in the top row, clear of the Minecraft logo
+		this.addRenderableWidget(Button.builder(Component.literal("Nimbus Features"), b -> NimbusHud.openMenu(self))
+			.bounds(this.width - 206, 6, 98, 20).build());
 	}
 
 	@Inject(method = "render", at = @At("TAIL"), require = 0)

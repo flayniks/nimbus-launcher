@@ -20,4 +20,11 @@ public interface Canvas {
 	default int textWidth(String s) {
 		return s.length() * 6;
 	}
+
+	/** Moves the origin to (x, y) and scales everything drawn until pop(). */
+	default void push(float x, float y, float scale) {
+	}
+
+	default void pop() {
+	}
 }

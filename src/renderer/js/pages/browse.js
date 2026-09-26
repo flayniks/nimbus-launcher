@@ -1,4 +1,4 @@
-import { h, icon, clear, fmtNumber, fmtAgo, debounce, fail, LOADER_NAMES, instanceIcon } from '../ui.js';
+import { h, icon, clear, fmtNumber, fmtAgo, debounce, fail, ok, modal, LOADER_NAMES, instanceIcon } from '../ui.js';
 import { api, store } from '../store.js';
 import { go } from '../router.js';
 import { openProject, installInto, installModpack, fits } from '../project.js';
@@ -43,8 +43,13 @@ export function render(page, params = {}) {
   const results = h('div.results');
   const sentinel = h('div.sentinel');
 
+  // "bring your own": a file from disk, into the folder that matches the tab you're on
+  const FILE_LABELS = { mod: 'Add mod file', modpack: 'Import .mrpack', resourcepack: 'Add resource pack', shader: 'Add shader pack' };
+  const fileBtn = h('button.btn.sm', { icon: 'upload', title: 'Add your own file from this computer', onclick: () => addFromFile() }, FILE_LABELS[state.type]);
+
   page.append(
     h('div.page-head', h('div', h('h1', 'Browse'), h('p', 'Mods, modpacks, resource packs and shaders from Modrinth.')), h('div.spacer'),
+      fileBtn,
       h('span.muted', { style: { fontSize: '12px' } }, h('kbd', 'Ctrl'), ' ', h('kbd', 'K'), ' to search')),
     tabs,
     h('div.toolbar', h('div.search', icon('search'), input), targetSel, versionSel, loaderSel, sortSel),
@@ -65,8 +70,47 @@ export function render(page, params = {}) {
   };
   requestAnimationFrame(placeInk);
 
+  async function addFromFile() {
+    const type = state.type;
+    try {
+      if (type === 'modpack') {
+        const inst = await api.modrinth.importPack();
+        if (inst) { await store.refreshInstances(); ok(`Imported ${inst.name}`, 'Find it in your library.'); }
+        return;
+      }
+      const target = state.target || await chooseInstance(type);
+      if (!target) return;
+      const res = await api.content.addFiles(target.id, type);
+      if (res.added.length) {
+        ok(res.added.length === 1 ? `Added ${res.added[0]} to ${target.name}` : `Added ${res.added.length} files to ${target.name}`,
+          type === 'mod' ? 'It loads the next time you play.' : 'It switches on by itself the next time you play.');
+        if (state.target) await loadInstalled();
+      }
+      if (res.skipped.length) fail(`Skipped ${res.skipped.map((x) => x.name).join(', ')}`, new Error(res.skipped[0].reason));
+    } catch (err) { fail('Could not add that', err); }
+  }
+
+  /** Asks which instance a file goes into (when none is picked above). */
+  function chooseInstance(type) {
+    return new Promise((resolve) => {
+      const list = store.instances.filter((i) => type !== 'mod' || i.loader !== 'vanilla');
+      let done = false;
+      const finish = (v) => { if (!done) { done = true; resolve(v); } };
+      const m = modal({
+        title: 'Add it to which instance?',
+        size: 'narrow',
+        body: list.length
+          ? h('div.stack', list.map((i) => h('button.pick-row', { onclick: () => { finish(i); m.close(); } },
+            instanceIcon(i), h('div', h('b', i.name), h('div.muted', `${i.mcVersion} · ${LOADER_NAMES[i.loader] || i.loader}`)))))
+          : h('div.muted', type === 'mod' ? 'You need a Fabric, Quilt, Forge or NeoForge instance for mods.' : 'Make an instance first.'),
+        onClose: () => finish(null),
+      });
+    });
+  }
+
   function pickType(key) {
     state.type = memory.type = key;
+    fileBtn.lastChild.textContent = FILE_LABELS[key];
     tabButtons.forEach((b) => b.classList.toggle('on', b.dataset.key === key));
     placeInk();
     drawFilters();

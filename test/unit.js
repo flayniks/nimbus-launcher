@@ -403,3 +403,101 @@ test('skins: one search finds a player by name and gallery skins by keyword', as
     await server.close();
   }
 });
+
+test('packs: new resource and shader packs switch on once, and stay off if you turn them off', async () => {
+  const packs = require('../src/core/packs');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'nimbus-packs-'));
+  const game = path.join(root, 'game');
+  const state = path.join(root, 'packs-seen.json');
+  fs.mkdirSync(path.join(game, 'resourcepacks', 'Folder Pack'), { recursive: true });
+  fs.writeFileSync(path.join(game, 'resourcepacks', 'Faithful.zip'), 'zip');
+  fs.writeFileSync(path.join(game, 'resourcepacks', 'Old.zip.disabled'), 'zip');
+  fs.writeFileSync(path.join(game, 'options.txt'), 'fov:0.0\nresourcePacks:["vanilla","fabric"]\n');
+  const read = () => Object.fromEntries(fs.readFileSync(path.join(game, 'options.txt'), 'utf8').trim().split('\n').map((l) => [l.slice(0, l.indexOf(':')), l.slice(l.indexOf(':') + 1)]));
+
+  let res = await packs.enableNewPacks({ gameDir: game, mcVersion: '1.21.1', stateFile: state });
+  assert.deepEqual(res.resourcepacks, ['Faithful.zip', 'Folder Pack']);
+  assert.deepEqual(JSON.parse(read().resourcePacks), ['vanilla', 'fabric', 'file/Faithful.zip', 'file/Folder Pack'], 'appended on top, disabled files ignored');
+  assert.deepEqual(JSON.parse(read().incompatibleResourcePacks), ['file/Faithful.zip', 'file/Folder Pack']);
+  assert.equal(read().fov, '0.0', 'other options untouched');
+
+  // switched off in game: stays off on the next launch
+  fs.writeFileSync(path.join(game, 'options.txt'), 'resourcePacks:["vanilla","file/Folder Pack"]\n');
+  res = await packs.enableNewPacks({ gameDir: game, mcVersion: '1.21.1', stateFile: state });
+  assert.deepEqual(res.resourcepacks, []);
+  assert.deepEqual(JSON.parse(read().resourcePacks), ['vanilla', 'file/Folder Pack']);
+
+  // a newly added pack is switched on
+  fs.writeFileSync(path.join(game, 'resourcepacks', 'New.zip'), 'zip');
+  res = await packs.enableNewPacks({ gameDir: game, mcVersion: '1.21.1', stateFile: state });
+  assert.deepEqual(JSON.parse(read().resourcePacks), ['vanilla', 'file/Folder Pack', 'file/New.zip']);
+
+  // Iris picks up a new shader pack
+  fs.mkdirSync(path.join(game, 'mods'), { recursive: true });
+  fs.writeFileSync(path.join(game, 'mods', 'iris-fabric-1.8.0.jar'), 'jar');
+  fs.mkdirSync(path.join(game, 'shaderpacks'), { recursive: true });
+  fs.writeFileSync(path.join(game, 'shaderpacks', 'ComplementaryReimagined.zip'), 'zip');
+  res = await packs.enableNewPacks({ gameDir: game, mcVersion: '1.21.1', stateFile: state });
+  assert.equal(res.shader, 'ComplementaryReimagined.zip');
+  const iris = fs.readFileSync(path.join(game, 'config', 'iris.properties'), 'utf8');
+  assert.match(iris, /shaderPack=ComplementaryReimagined\.zip/);
+  assert.match(iris, /enableShaders=true/);
+
+  // 1.8.9 writes plain names; alpha/beta is left alone
+  const old = path.join(root, 'old');
+  fs.mkdirSync(path.join(old, 'resourcepacks'), { recursive: true });
+  fs.writeFileSync(path.join(old, 'resourcepacks', 'PvP.zip'), 'zip');
+  await packs.enableNewPacks({ gameDir: old, mcVersion: '1.8.9', stateFile: path.join(root, 'old.json') });
+  assert.match(fs.readFileSync(path.join(old, 'options.txt'), 'utf8'), /^resourcePacks:\["PvP\.zip"\]$/m);
+  assert.equal(packs.packStyle('b1.7.3'), null);
+  assert.equal(packs.packStyle('26.3'), 'modern');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('writeJson: saves in the same millisecond do not trip over each other', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'nimbus-wj-'));
+  const file = path.join(root, 'settings.json');
+  await Promise.all(Array.from({ length: 40 }, (_, i) => util.writeJson(file, { i })));
+  assert.equal(typeof (await util.readJson(file)).i, 'number');
+  assert.deepEqual(fs.readdirSync(root), ['settings.json']);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('presence: counts an install once, each window once, and reads the busier window', async () => {
+  const http = require('http');
+  const counters = {};
+  const hits = [];
+  const server = http.createServer((req, res) => {
+    const [, kind, , key] = req.url.split('/');
+    if (kind === 'hit') { counters[key] = (counters[key] || 0) + 1; hits.push(key); }
+    if (!(key in counters)) { res.writeHead(404); return res.end('{}'); }
+    res.end(JSON.stringify({ value: counters[key] }));
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  process.env.NIMBUS_COUNTER_URL = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const { Presence, WINDOW_MS } = require('../src/core/presence');
+    let now = 10 * WINDOW_MS + 1000;
+    let settings = { shareOnline: true, countedInstall: false };
+    let playing = false;
+    const p = new Presence({ settings: () => settings, save: async (patch) => { settings = { ...settings, ...patch }; }, playing: () => playing, now: () => now });
+    await p.beat();
+    await p.beat();
+    assert.deepEqual(hits, ['players-total', 'online-10']);
+    assert.equal(settings.countedInstall, true);
+    playing = true;
+    now += WINDOW_MS; // next window
+    await p.beat();
+    assert.deepEqual(hits.slice(2), ['online-11', 'playing-11']);
+    counters['online-10'] = 30; // lots of people last window, few so far in this one
+    assert.deepEqual(await p.stats(), { online: 30, playing: 1, total: 1 });
+    // sharing off: nothing is sent
+    settings.shareOnline = false;
+    now += WINDOW_MS;
+    await p.beat();
+    assert.equal(hits.length, 4);
+  } finally {
+    delete process.env.NIMBUS_COUNTER_URL;
+    server.close();
+  }
+});

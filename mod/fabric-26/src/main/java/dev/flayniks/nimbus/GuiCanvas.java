@@ -34,6 +34,18 @@ public final class GuiCanvas implements Canvas {
 	}
 
 	@Override
+	public void push(float x, float y, float scale) {
+		g.pose().pushMatrix();
+		g.pose().translate(x, y);
+		g.pose().scale(scale, scale);
+	}
+
+	@Override
+	public void pop() {
+		g.pose().popMatrix();
+	}
+
+	@Override
 	public int textWidth(String s) {
 		return Minecraft.getInstance().font.width(s);
 	}

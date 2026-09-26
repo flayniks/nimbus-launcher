@@ -19,6 +19,29 @@ public final class NimbusArt {
 	private NimbusArt() {
 	}
 
+	// ------------------------------------------------------------------ animation options
+
+	/** Settings → Animations in the launcher, passed in as -Dnimbus.anim.* when the game starts. */
+	public static final boolean LOADING = flag("loading");
+	static final boolean PARTICLES = flag("particles");
+	static final boolean CUBE_MOTION = flag("cube");
+	public static final boolean BADGE = flag("badge");
+	static final boolean MENU_MOTION = flag("menus");
+	static final float SPEED = speed();
+
+	private static boolean flag(String name) {
+		return !"false".equalsIgnoreCase(System.getProperty("nimbus.anim." + name));
+	}
+
+	private static float speed() {
+		try {
+			float v = Float.parseFloat(System.getProperty("nimbus.anim.speed", "1"));
+			return v > 0.1f && v < 5f ? v : 1f;
+		} catch (NumberFormatException e) {
+			return 1f;
+		}
+	}
+
 	// ------------------------------------------------------------------ loading screen
 
 	/**
@@ -32,18 +55,18 @@ public final class NimbusArt {
 		if (alpha <= 0.01f) return;
 		int w = c.width();
 		int h = c.height();
-		float t = millis / 1000f;
+		float t = millis * SPEED / 1000f;
 
 		if (opaque) c.rect(0, 0, w, h, argb(BG, 1f));
-		backdrop(c, w, h, t, alpha);
+		backdrop(c, w, h, t, alpha, PARTICLES, true);
 
 		int size = clamp(Math.round(h * 0.11f), 14, 44);
 		int cell = Math.max(1, Math.round(size / 8f));
 		int cx = w / 2;
 		int cy = Math.round(h * 0.36f);
 		float intro = easeOutCubic(clamp01(t / 0.6f));
-		int bob = Math.round((float) Math.sin(t * Math.PI * 2 / 2.4) * size * 0.08f);
-		cube(c, cx, cy + bob + Math.round((1 - intro) * size * 0.4f), size, cell, t, alpha * intro, true);
+		int bob = CUBE_MOTION ? Math.round((float) Math.sin(t * Math.PI * 2 / 2.4) * size * 0.08f) : 0;
+		cube(c, cx, cy + bob + Math.round((1 - intro) * size * 0.4f), size, cell, CUBE_MOTION ? t : 1f, alpha * intro, CUBE_MOTION);
 
 		int big = Math.max(2, Math.round(h / 72f));
 		String word = "NIMBUS";
@@ -73,9 +96,20 @@ public final class NimbusArt {
 		}
 	}
 
+	/** The badge at any spot, fully shown (for the HUD and the inventory). */
+	public static void badgeAt(Canvas c, int x, int y, long millis) {
+		float t = millis * SPEED / 1000f;
+		float a = easeOutCubic(clamp01(t / 0.35f));
+		if (a <= 0.01f) return;
+		cube(c, x + 7, y + 8, 8, 1, t, a, false);
+		wordmark(c, "NIMBUS", x + 18, y, 1, t + 10, a);
+		text(c, "LAUNCHER", x + 18, y + 9, 1, 1, MUTED, a * 0.9f);
+	}
+
 	/** The corner badge on the title screen. */
 	public static void badge(Canvas c, long millis) {
-		float t = millis / 1000f;
+		if (!BADGE) return;
+		float t = millis * SPEED / 1000f;
 		float a = easeOutCubic(clamp01((t - 0.2f) / 0.8f));
 		if (a <= 0.01f) return;
 		int slide = Math.round((1 - a) * -8);
@@ -91,16 +125,17 @@ public final class NimbusArt {
 		int w = c.width();
 		int h = c.height();
 		c.rect(0, 0, w, h, opaque ? argb(BG, 1f) : argb(BG, 0.78f));
-		backdrop(c, w, h, millis / 1000f, opaque ? 1f : 0.7f);
+		// "Moving menus" off: a still glow and no drifting sparks
+		backdrop(c, w, h, MENU_MOTION ? millis * SPEED / 1000f : 0f, opaque ? 1f : 0.7f, PARTICLES && MENU_MOTION, MENU_MOTION);
 	}
 
 	// ------------------------------------------------------------------ pieces
 
-	private static void backdrop(Canvas c, int w, int h, float t, float alpha) {
+	private static void backdrop(Canvas c, int w, int h, float t, float alpha, boolean particles, boolean pulsing) {
 		// soft glow behind the logo: nested ellipses drawn a row at a time, so the edges stay round
 		int gx = w / 2;
 		int gy = Math.round(h * 0.4f);
-		float pulse = 1f + 0.04f * (float) Math.sin(t * 1.6f);
+		float pulse = pulsing ? 1f + 0.04f * (float) Math.sin(t * 1.6f) : 1f;
 		int step = Math.max(1, h / 120);
 		for (int level = 1; level <= 5; level++) {
 			float rx = w * 0.09f * level * pulse;
@@ -114,7 +149,7 @@ public final class NimbusArt {
 			}
 		}
 		// particles drifting upwards
-		for (int i = 0; i < 28; i++) {
+		for (int i = 0; particles && i < 28; i++) {
 			float rx = hash(i * 3 + 1);
 			float speed = 6 + hash(i * 3 + 2) * 16;
 			float phase = hash(i * 3 + 3);

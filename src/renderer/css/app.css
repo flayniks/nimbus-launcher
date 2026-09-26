@@ -494,7 +494,10 @@ input[type='range']:active::-webkit-slider-thumb { transform: scale(1.2); }
 .cape-tile img, .cape-tile .nocape { width: 50px; height: 80px; image-rendering: pixelated; border-radius: 3px; }
 .cape-tile .nocape { display: grid; place-items: center; border: 1.5px dashed var(--border-2); color: var(--muted); }
 .cape-tile .nocape svg { width: 20px; height: 20px; }
-.page.dropping { outline: 2px dashed color-mix(in srgb, var(--a1) 70%, transparent); outline-offset: -12px; }
+.page.dropping, .dropping { outline: 2px dashed color-mix(in srgb, var(--a1) 70%, transparent); outline-offset: -12px; border-radius: 14px; }
+.pick-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: background 0.2s, border-color 0.2s, transform 0.2s var(--ease); }
+.pick-row:hover { background: var(--panel-2); border-color: color-mix(in srgb, var(--a1) 50%, transparent); transform: translateY(-1px); }
+.pick-row .muted { font-size: 12px; }
 @media (max-width: 1060px) { .skins-layout { grid-template-columns: 1fr; } .skin-stage { position: relative; } }
 
 /* ------------------------------------------------------------------ accounts */

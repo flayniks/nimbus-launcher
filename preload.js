@@ -1,5 +1,5 @@
 'use strict';
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils, webFrame } = require('electron');
 
 async function call(channel, ...args) {
   const res = await ipcRenderer.invoke(channel, ...args);
@@ -22,6 +22,16 @@ contextBridge.exposeInMainWorld('nimbus', {
     close: () => call('win:close'),
     external: (url) => call('shell:external', url),
     openData: () => call('data:open'),
+    // a dropped file's path on disk (sandboxed pages can't read it themselves)
+    pathForFile: (file) => { try { return webUtils.getPathForFile(file) || null; } catch { return null; } },
+    setZoom: (f) => { try { webFrame.setZoomFactor(Math.max(0.75, Math.min(1.5, Number(f) || 1))); } catch { /* keep */ } },
+  },
+  presence: {
+    stats: () => call('presence:stats'),
+  },
+  look: {
+    pickBackground: () => call('look:pickBackground'),
+    background: () => call('look:background'),
   },
   settings: {
     get: () => call('settings:get'),
@@ -48,6 +58,7 @@ contextBridge.exposeInMainWorld('nimbus', {
     list: (id) => call('content:list', id),
     toggle: (id, rel, enabled) => call('content:toggle', id, rel, enabled),
     remove: (id, rel) => call('content:remove', id, rel),
+    addFiles: (id, type, paths) => call('content:addFiles', id, type, paths),
     identify: (id) => call('content:identify', id),
     updates: (id) => call('content:updates', id),
     update: (id, items) => call('content:update', id, items),

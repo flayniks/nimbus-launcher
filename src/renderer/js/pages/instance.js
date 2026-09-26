@@ -95,8 +95,38 @@ export function render(page, params) {
       h('div.toolbar', sub, h('div', { style: { flex: 1 } }),
         updatesBtn,
         h('button.btn.sm', { icon: 'folder', onclick: () => api.instances.open(inst.id, { mod: 'mods', resourcepack: 'resourcepacks', shader: 'shaderpacks' }[kind]) }, 'Folder'),
+        h('button.btn.sm', { icon: 'upload', title: 'Add files from your computer', onclick: () => addFiles(kind) }, 'Add file'),
         h('button.btn.sm.primary', { icon: 'plus', onclick: () => go('browse', { type: kind, target: inst.id }) }, 'Add content')),
       listEl);
+
+    async function addFiles(type, paths) {
+      try {
+        const res = await api.content.addFiles(inst.id, type, paths);
+        if (res.added.length) {
+          const what = type === 'mod' ? 'mod' : type === 'shader' ? 'shader pack' : 'resource pack';
+          ok(res.added.length === 1 ? `Added ${res.added[0]}` : `Added ${res.added.length} ${what}s`,
+            type === 'mod' ? 'It loads the next time you play.' : 'It switches on by itself the next time you play.');
+          await refresh();
+        }
+        if (res.skipped.length) fail(`Skipped ${res.skipped.map((x) => x.name).join(', ')}`, new Error(res.skipped[0].reason));
+      } catch (err) { fail('Could not add that', err); }
+    }
+
+    // drop jars and zips anywhere on the tab: each goes where its kind belongs
+    root.addEventListener('dragover', (e) => { e.preventDefault(); root.classList.add('dropping'); });
+    root.addEventListener('dragleave', (e) => { if (e.target === root) root.classList.remove('dropping'); });
+    root.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      root.classList.remove('dropping');
+      const byType = { mod: [], resourcepack: [], shader: [] };
+      for (const f of e.dataTransfer?.files || []) {
+        const p = api.app.pathForFile(f);
+        if (!p) continue;
+        if (/\.jar$/i.test(f.name)) byType.mod.push(p);
+        else byType[kind === 'shader' ? 'shader' : 'resourcepack'].push(p);
+      }
+      for (const [type, list] of Object.entries(byType)) if (list.length) await addFiles(type, list);
+    });
 
     function draw() {
       clear(listEl);
@@ -105,7 +135,7 @@ export function render(page, params) {
         const label = KINDS.find((k) => k.key === kind).label.toLowerCase();
         listEl.appendChild(h('div.empty', icon(KINDS.find((k) => k.key === kind).icon),
           h('b', `No ${label} yet`),
-          kind === 'mod' && inst.loader === 'vanilla' ? 'Vanilla cannot load mods. Make a Fabric instance for mods.' : `Find ${label} in Browse, or drop files into the folder.`));
+          kind === 'mod' && inst.loader === 'vanilla' ? 'Vanilla cannot load mods. Make a Fabric instance for mods.' : `Find ${label} in Browse, press Add file, or drop files here.`));
         return;
       }
       list.forEach((item, i) => {

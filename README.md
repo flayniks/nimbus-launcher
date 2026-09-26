@@ -6,6 +6,10 @@ A fast, good-looking launcher for **Minecraft: Java Edition** with licensed (Mic
 - **Every loader.** Vanilla, Fabric, Quilt, Forge (1.6.1+) and NeoForge, each with its own loader version picker.
 - **Browse Modrinth.** Search mods, modpacks, resource packs and shaders. The results are filtered to fit the instance you install into, and required dependencies come along automatically.
 - **Modpacks.** Install `.mrpack` packs from Browse, or import a file you already have.
+- **Your own files.** An *Add file* button on every Browse tab and instance tab (mods, packs, shaders), or just drop files on the window. Resource packs and shader packs you add, however you add them (even straight into the folder), are switched on for you the next time you play.
+- **Nimbus Features in game.** Press *Nimbus Features* in the pause menu or title screen (or Right Shift) for 18 HUD boxes you can drag and resize (FPS, coordinates, keystrokes, CPS, ping and more), zoom, fullbright, one-click FPS presets and 20+ other options.
+- **Make it yours.** Six themes, accent colours (or your own two), animated backgrounds (aurora, starfield, neon grid) or any picture, glass, card styles, corners, UI size and sidebar labels. Every animation, in the launcher, the launch splash and the game, has its own switch.
+- **Player counter.** The top of the window shows how many people have Nimbus open, how many are playing, and how many have installed it. It is anonymous and can be turned off.
 - **FPS Boost.** One click tunes an instance for more, steadier frames (details below).
 - **Right Java, automatically.** Nimbus downloads Mojang's own Java runtime for each version (8, 16, 17, 21 or 25), so you never install Java yourself.
 - **Nimbus loading screen.** Hit Play and an animated Nimbus splash follows the launch. In Fabric and Quilt instances the game itself then loads on the Nimbus screen instead of Mojang's red one, through the built-in **Nimbus Core** mod.
@@ -14,6 +18,10 @@ A fast, good-looking launcher for **Minecraft: Java Edition** with licensed (Mic
 - Live game console, crash detection, play time, one-click Repair, instance duplication, update checks for installed content, and an auto-join server option.
 
 ![Home](docs/home.png)
+
+| Your look | Settings |
+|---|---|
+| ![Two custom looks](docs/looks.png) | ![Appearance settings](docs/settings-appearance.png) |
 
 | New instance | FPS Boost |
 |---|---|
@@ -82,7 +90,7 @@ Skins go through Mojang's own skin service with the account you're signed in wit
 
 ## Nimbus Core and the loading screen
 
-Nimbus Core ([`mod/`](mod/README.md)) is a tiny Fabric mod that ships inside the launcher. It replaces Minecraft's red Mojang loading screen with an animated Nimbus one (pixel-art cube, drop-in lettering, particles, progress bar), adds a Nimbus badge to the title screen, and adds the in-game Skins & Capes menu.
+Nimbus Core ([`mod/`](mod/README.md)) is a small Fabric mod that ships inside the launcher. It replaces Minecraft's red Mojang loading screen with an animated Nimbus one (pixel-art cube, drop-in lettering, particles, progress bar), adds a Nimbus badge to the title screen, and adds the in-game Skins & Capes and Nimbus Features menus.
 
 | In-game loading screen | Title screen badge | Launch splash |
 |---|---|---|
@@ -92,7 +100,40 @@ Nimbus Core ([`mod/`](mod/README.md)) is a tiny Fabric mod that ships inside the
 - It shows as **Built in** in the instance's mod list, with no off switch or delete button. If someone disables or deletes the file by hand, it comes back on the next launch.
 - Forge, NeoForge, vanilla and older versions don't get it. Those still get the launcher's own animated splash while the game starts.
 
-The splash is a separate window that shows from Play until the game opens its window. It follows the downloads, Java and mod loading as they happen. Click it to hide it, or turn it off in Settings.
+The splash is a separate window that shows from Play until the game opens its window. It follows the downloads, Java and mod loading as they happen. Click it to hide it, or change or turn it off in *Settings → Animations*.
+
+## Nimbus Features (in game)
+
+In Fabric and Quilt games, **Nimbus Features** sits on the left of the pause menu and at the top of the title screen, and Right Shift opens it anywhere in game.
+
+| The menu | Editing the HUD | In a world |
+|---|---|---|
+| ![Nimbus Features](docs/ingame-features.png) | ![HUD editor](docs/ingame-hud-editor.png) | ![HUD](docs/ingame-hud.png) |
+
+- **HUD:** FPS, coordinates, direction, biome, clock, ping, CPS, keystrokes, speed, memory, held item, armour, server, light level, day counter, session time, chunk and the Nimbus logo. Switch them on, press *Edit HUD layout*, then drag them anywhere. Click one to resize or hide it. Boxes snap to the edges and the centre. Box style, accent colour, text shadow and a 12/24-hour clock are in the same tab.
+- **Performance:** Max FPS / Balanced / Quality presets, a background FPS limit (the game barely runs while it's in the background), render and simulation distance, max frame rate, VSync, graphics, particles, clouds, entity shadows, smooth lighting, biome blend and entity distance.
+- **Utilities:** zoom (hold C, five strengths, smooth or instant), fullbright, toggle sprint and sneak, no hurt shake, no view bobbing, the inventory watermark and the Right Shift shortcut.
+
+The settings are shared by every instance, so your HUD looks the same everywhere.
+
+## Make it yours
+
+Settings has an **Appearance** section and an **Animations** section.
+
+![Animations settings](docs/settings-animations.png)
+
+- **Appearance:** theme (Midnight, Void, Nebula, Ocean, Forest, Ember), accent colour (six presets or two colours of your own), background (Aurora, Starfield, Neon grid, Plain or your own picture with blur and darken), glass and how frosted it is, card style, corners, UI size (90–125%) and sidebar labels.
+- **Animations in the launcher:** on/off, speed, how pages change (rise, fade, slide, zoom or none), lists sliding in, what cards do on hover (lift, tilt, glow or nothing) and the moving background.
+- **Launch splash:** on/off, cube or minimal style, and particles.
+- **In the game** (through Nimbus Core): the Nimbus loading screen (off shows Mojang's), particles, the spinning cube, animation speed, the title screen badge and the moving glow behind the Nimbus menus.
+
+## Player counter
+
+The pill at the top of the window shows people online (with Nimbus open), people playing, and everyone who has installed Nimbus. Each launcher adds one to a counter for the current five-minute window, and one to "playing" while a game runs. The all-time counter goes up once per install. No account, name or ID is sent, only anonymous counter bumps ([Abacus](https://abacus.jasoncameron.dev)). *Settings → General* can hide the counter or stop counting you.
+
+## Resource packs and shaders
+
+Minecraft never switches on a new pack by itself, so Nimbus does it for you. Before each launch it looks for resource packs and shader packs it hasn't seen in that instance before, and turns them on: resource packs go on top of the list in `options.txt` (also marked as accepted, so a pack made for another version still loads), and a new shader pack is selected for Iris, Oculus or OptiFine. Packs that were already there are left alone, so one you turn off in game stays off.
 
 ## FPS Boost
 
@@ -154,6 +195,8 @@ Every one of them started, loaded its mod loader and got as far as creating the 
 Nimbus Core was checked in real games on the virtual display on Fabric 1.20.1, 1.21.1, 1.21.11 and 26.3, and on Quilt 1.21.1. Each one loaded on the Nimbus screen, faded straight to the title screen with the badge, and never showed Mojang's red screen or got stuck. The variable it hides the Mojang logo with was checked in the bytecode of every release from 1.20 to 26.3.
 
 The skins page was tested against stand-ins for Mojang's skin service, its name lookup and the MineSkin gallery (`test/mock-services.js`): search by player name and by keyword, save a result, preview, wear with slim arms, switch capes and hide the cape. The search was also run against the real gallery and Mojang. The in-game menu was tested the same way on Fabric 1.20.1, 1.21.1, 1.21.11 and 26.3: from the title screen and from the pause menu in a world, typing a player's name, wearing their skin, searching a keyword and saving a result. Every game method the menu calls was checked to exist in each release from 1.20 to 26.3.
+
+Nimbus Features was tested in real games on Fabric 1.20.1, 1.21.1, 1.21.11 and 26.3: opening the menu from the pause menu, the title screen and Right Shift, switching HUD boxes on, dragging and resizing them in the editor, zoom and the inventory watermark. The in-game animation switches were checked on 1.21.1 (Mojang's loading screen, no badge) and 26.3 (still cube, no particles). The launcher's look (themes, backgrounds, your own picture and colours, shapes, size), the animation settings, the player counter (against a stand-in counter) and the *Add file* buttons were run through in the real Electron app.
 
 The updater was tested by having a 1.0.0 build read a local copy of the release feed, find 1.1.0, download it and verify its checksum. The final "install and restart" step only runs on Windows.
 

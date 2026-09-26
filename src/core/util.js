@@ -105,9 +105,11 @@ async function readJson(p, fallback) {
 }
 
 /** Writes through a temp file so a crash never leaves half a JSON file behind. */
+let tmpSeq = 0;
 async function writeJson(p, data) {
   await fsp.mkdir(path.dirname(p), { recursive: true });
-  const tmp = `${p}.${process.pid}.${Date.now()}.tmp`;
+  // unique per write: two saves in the same millisecond must not share a temp file
+  const tmp = `${p}.${process.pid}.${Date.now()}.${++tmpSeq}.tmp`;
   await fsp.writeFile(tmp, JSON.stringify(data, null, 2));
   await fsp.rename(tmp, p);
 }

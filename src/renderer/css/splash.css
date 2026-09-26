@@ -98,3 +98,11 @@ body { display: grid; place-items: center; font: 13px/1.4 'Inter', 'Segoe UI Var
 
 .hint { position: absolute; bottom: 12px; font-size: 10.5px; color: rgba(139, 144, 165, 0.6); animation: fade 0.6s 2s both; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; } }
+
+/* options from Settings → Animations */
+:root[data-particles='off'] .particles { display: none; }
+:root[data-style='minimal'] .stage { display: none; }
+:root[data-style='minimal'] .word { font-size: 46px; margin-top: 18px; }
+:root[data-style='minimal'] .sub { margin-bottom: 18px; }
+:root[data-style='minimal'] .instance { font-size: 15px; }
+body.still *, body.still *::before, body.still *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }

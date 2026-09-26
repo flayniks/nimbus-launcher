@@ -2,6 +2,6 @@
   "required": false,
   "package": "dev.flayniks.nimbus.mixin",
   "compatibilityLevel": "${compat}",
-  "client": ["LoadingOverlayMixin", "TitleScreenMixin", "PauseScreenMixin"],
+  "client": ["LoadingOverlayMixin", "TitleScreenMixin", "PauseScreenMixin", "OptionAccess", "HudMixin", "ContainerScreenMixin"],
   "injectors": { "defaultRequire": 0 }
 }
