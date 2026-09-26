@@ -18,6 +18,10 @@ Like the loading screen, it is painted with rectangles and text only. Skins are 
 
 Right Shift opens the menu and C zooms. On 26.3, which reads keys through SDL, the key codes are translated at runtime.
 
+## Nimbus LAN
+
+`NimbusLan` adds **Nimbus LAN** to the pause menu in singleplayer. It opens the world on a local port (`Compat.publishLan`: `publishServer(GameType, cheats, port)`, and on 26.3 `publishServer(MultiplayerScope.LAN, guestCommands, port)`) and tells the launcher over a local HTTP bridge (`-Dnimbus.bridge=http://127.0.0.1:<port>/<token>`). A background thread asks the bridge for events every second. A join request shows **"NICK wants to join your world"** at the top of the screen, drawn above the pause menu's blur. **Y** or **N** answers it (SDL scancodes on 26.3). The launcher does the rest: WebRTC between the two launchers, and a local port on the friend's side that their game connects to.
+
 ## Menu background
 
 `MenuBackground` replaces the spinning panorama behind the title screen and the menus with the Nimbus glow or a picture (`PanoramaMixin`; 1.20–1.20.4 draw it from `TitleScreenMixin`). The picture comes from `-Dnimbus.menu.image=<png>` (the launcher's `menu-background.png`), or `config/nimbus-background.png`. It is decoded by `Png`, scaled and cropped to the window by `Picture` on a background thread, written back out as a PNG and handed to Minecraft's own image loader, so the only texture calls are the few in `Compat`. *Choose…* opens LWJGL's tinyfd file dialog, or SDL's on 26.3, which no longer ships tinyfd.

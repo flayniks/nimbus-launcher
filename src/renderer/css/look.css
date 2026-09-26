@@ -255,3 +255,58 @@ body.no-anim .anim-pv * { animation: none !important; }
 .swatch.menu-picture { display: grid; place-items: center; color: var(--muted); background: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.04) 0 8px, transparent 8px 16px); }
 .swatch.menu-picture svg { width: 24px; height: 24px; }
 .choice small { display: block; margin-top: 2px; color: var(--muted); font-weight: 500; font-size: 11.5px; line-height: 1.3; }
+
+/* ---------------------------------------------------------------- friends */
+.nav-badge { position: absolute; top: 6px; right: 8px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; background: var(--grad); color: #fff; font-size: 11px; font-weight: 800; display: grid; place-items: center; box-shadow: 0 0 12px color-mix(in srgb, var(--a1) 60%, transparent); animation: pop-in 0.35s var(--ease-spring); }
+:root[data-sidebar='labels'] .nav-badge { position: static; margin-left: auto; }
+.fr-shell { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 18px; align-items: start; height: calc(100vh - var(--titlebar) - 150px); min-height: 420px; }
+@media (max-width: 900px) { .fr-shell { grid-template-columns: 1fr; height: auto; } }
+.fr-side { display: flex; flex-direction: column; gap: 10px; min-height: 0; height: 100%; }
+.fr-add { display: flex; gap: 8px; padding: 10px; }
+.fr-add .input { flex: 1; min-width: 0; }
+.fr-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; min-height: 0; padding-right: 4px; }
+.fr-list .group-title { margin: 10px 4px 2px; font-size: 11.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
+.fr-row { position: relative; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; border: 1px solid transparent; cursor: pointer; transition: background 0.2s, border-color 0.2s, transform 0.2s var(--ease); animation: rise 0.35s var(--ease) both; }
+.fr-row:hover { background: var(--panel); transform: translateX(2px); }
+.fr-row.on { background: color-mix(in srgb, var(--a1) 14%, transparent); border-color: color-mix(in srgb, var(--a1) 45%, transparent); }
+.fr-row.req { cursor: default; background: var(--panel); }
+.fr-avatar { position: relative; flex: none; }
+.fr-head { border-radius: 10px; image-rendering: pixelated; background: var(--panel-2); display: block; }
+.fr-dot { position: absolute; right: -3px; bottom: -3px; width: 13px; height: 13px; border-radius: 50%; background: #4b5563; border: 3px solid var(--bg); }
+.fr-row.online .fr-dot { background: #34d399; box-shadow: 0 0 8px #34d399; }
+.fr-txt { display: grid; min-width: 0; flex: 1; }
+.fr-txt b { font-size: 14px; }
+.fr-txt span { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fr-txt span.hosting { color: var(--a2); font-weight: 600; }
+.fr-badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 99px; background: var(--grad); color: #fff; font-size: 11.5px; font-weight: 800; display: grid; place-items: center; }
+.fr-join { animation: nudge 2.4s ease-in-out infinite; }
+.fr-hint { padding: 14px; color: var(--muted); font-size: 13px; text-align: center; }
+.fr-warn { display: flex; gap: 8px; align-items: center; padding: 10px 12px; border-radius: 12px; font-size: 12.5px; color: #fbbf24; background: rgba(251, 191, 36, 0.08); border: 1px solid rgba(251, 191, 36, 0.25); }
+.fr-warn svg { width: 16px; height: 16px; flex: none; }
+.fr-empty { display: grid; justify-items: center; gap: 8px; padding: 26px; text-align: center; color: var(--muted); }
+.fr-empty svg { width: 30px; height: 30px; color: var(--a2); }
+.fr-empty b { color: var(--text); }
+.fr-chat { display: flex; flex-direction: column; min-height: 0; height: 100%; border-radius: var(--radius-lg, 18px); background: var(--panel); border: 1px solid var(--border); overflow: hidden; }
+.fr-chat-empty { margin: auto; display: grid; justify-items: center; gap: 8px; color: var(--muted); padding: 40px; text-align: center; }
+.fr-chat-empty svg { width: 40px; height: 40px; color: var(--a2); opacity: 0.8; }
+.fr-chat-empty b { color: var(--text); font-size: 16px; }
+.fr-chat-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.fr-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; min-height: 200px; }
+.fr-msg { max-width: 72%; align-self: flex-start; display: grid; gap: 2px; }
+.fr-msg p { margin: 0; padding: 10px 14px; border-radius: 16px 16px 16px 4px; background: var(--panel-2); line-height: 1.45; user-select: text; overflow-wrap: anywhere; }
+.fr-msg.mine { align-self: flex-end; justify-items: end; }
+.fr-msg.mine p { background: var(--grad); color: #fff; border-radius: 16px 16px 4px 16px; }
+.fr-msg time { font-size: 10.5px; color: var(--muted); padding: 0 6px; }
+.fr-msg.new { animation: pop-in 0.35s var(--ease-spring) both; }
+.fr-compose { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--border); }
+.fr-compose .input { flex: 1; }
+
+/* Nimbus LAN status on the Friends page */
+.lan-bar { display: grid; gap: 8px; margin-bottom: 14px; }
+.lan-bar:empty { display: none; }
+.lan-card { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 16px; background: color-mix(in srgb, var(--a1) 12%, var(--panel)); border: 1px solid color-mix(in srgb, var(--a1) 40%, transparent); animation: rise 0.35s var(--ease) both; }
+.lan-card > svg { width: 26px; height: 26px; color: var(--a2); flex: none; }
+.lan-card.failed { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.4); }
+.lan-card.playing { background: rgba(52, 211, 153, 0.1); border-color: rgba(52, 211, 153, 0.4); }
+.lan-card.ask { box-shadow: 0 0 30px -8px color-mix(in srgb, var(--a2) 70%, transparent); animation: rise 0.35s var(--ease) both, nudge 2.4s 0.4s ease-in-out infinite; }
+.lan-spin { width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid color-mix(in srgb, var(--a2) 30%, transparent); border-top-color: var(--a2); animation: spin 0.8s linear infinite; flex: none; }

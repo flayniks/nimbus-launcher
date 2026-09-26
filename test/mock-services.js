@@ -79,6 +79,7 @@ function start({ token = 'mock-token', name = 'Tester', skin, capes, gallery, pl
     return id;
   };
   const state = {
+    joins: new Map(),
     uploads: [],
     skin: { id: 'skin-1', tex: put(skin || solid([80, 120, 200])), variant: 'CLASSIC' },
     capes: (capes || [png(64, 32, (x) => [200, 40 + x * 3, 60, 255]), png(64, 32, (x, y) => [30, 60 + y * 5, 200, 255])])
@@ -131,6 +132,17 @@ function start({ token = 'mock-token', name = 'Tester', skin, capes, gallery, pl
     if (req.method === 'GET' && url.startsWith('/users/profiles/minecraft/')) {
       const who = state.players.find((p) => p.name.toLowerCase() === decodeURIComponent(url.slice(26)).toLowerCase());
       return who ? send(200, { id: who.id, name: who.name }) : send(404, { errorMessage: 'Couldn\'t find any profile with that name' });
+    }
+    // joining a server: the client says so, the server checks (Nimbus LAN tests)
+    if (req.method === 'POST' && url === '/session/minecraft/join') {
+      const b = JSON.parse((await readBody(req)).toString() || '{}');
+      state.joins.set(b.serverId, b.selectedProfile);
+      return send(204);
+    }
+    if (req.method === 'GET' && url.startsWith('/session/minecraft/hasJoined')) {
+      const q = new URLSearchParams(url.split('?')[1]);
+      const id = state.joins.get(q.get('serverId'));
+      return id ? send(200, { id, name: q.get('username'), properties: [] }) : send(204);
     }
     if (req.method === 'GET' && url.startsWith('/session/minecraft/profile/')) {
       const who = state.players.find((p) => p.id === url.slice(27));

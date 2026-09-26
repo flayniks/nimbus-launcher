@@ -8,16 +8,18 @@ import * as accounts from './pages/accounts.js';
 import * as settings from './pages/settings.js';
 import * as instance from './pages/instance.js';
 import * as skins from './pages/skins.js';
+import * as friendsPage from './pages/friends.js';
 import { head as skinHead } from './skinart.js';
 import { presencePill } from './look.js';
 
-registerPages({ home, browse, boost, accounts, settings, instance, skins });
+registerPages({ home, browse, boost, accounts, settings, instance, skins, friends: friendsPage });
 
 const NAV = [
   { page: 'home', icon: 'home', label: 'Home' },
   { page: 'browse', icon: 'compass', label: 'Browse mods & packs' },
   { page: 'boost', icon: 'zap', label: 'FPS Boost' },
   { page: 'skins', icon: 'shirt', label: 'Skins & capes' },
+  { page: 'friends', icon: 'users', label: 'Friends' },
   { page: 'settings', icon: 'settings', label: 'Settings' },
 ];
 
@@ -275,6 +277,36 @@ async function boot() {
   renderUpdatePill();
   announceNewVersion();
   store.on('update', onUpdateState);
+  // friends: a badge on the sidebar, and a toast for messages you're not looking at
+  const friendsBadge = () => {
+    const item = document.querySelector('.nav-item[data-page="friends"]');
+    if (!item) return;
+    const s = store.friends || {};
+    const n = Object.values(s.unread || {}).reduce((a, b) => a + b, 0) + (s.requests?.length || 0);
+    let b = item.querySelector('.nav-badge');
+    if (!n) { b?.remove(); return; }
+    if (!b) item.appendChild(b = h('span.nav-badge'));
+    b.textContent = n > 9 ? '9+' : String(n);
+  };
+  store.on('friends', friendsBadge);
+  friendsBadge();
+  // Nimbus LAN: someone wants into your world, or your join changed state
+  let lastAsk = '';
+  store.on('lan', (l) => {
+    const r = l.requests?.[l.requests.length - 1];
+    if (r && r.id !== lastAsk) {
+      lastAsk = r.id;
+      toast('info', `${r.name} wants to join your world`, 'Press Y in game, or answer here.', { timeout: 20000, actions: [{ label: 'Let them in', run: () => api.lan.decide(r.id, true) }, { label: 'No', run: () => api.lan.decide(r.id, false) }] });
+    }
+    const j = l.joining;
+    if (j?.status === 'failed' && j.id !== lastAsk) { lastAsk = j.id; toast('err', `Couldn't join ${j.name}`, j.error); }
+  });
+  store.on('friend-message', (m) => {
+    const onFriends = document.querySelector('.nav-item.active')?.dataset.page === 'friends';
+    if (m.type === 'chat' && !onFriends) toast('info', m.name, m.text.length > 90 ? `${m.text.slice(0, 90)}…` : m.text, { actions: [{ label: 'Reply', run: () => go('friends', { uuid: m.from }) }] });
+    if (m.type === 'friend-request') toast('info', `${m.name} wants to be friends`, 'Open Friends to accept.', { actions: [{ label: 'Open', run: () => go('friends') }] });
+    if (m.type === 'friend-added') toast('ok', `You and ${m.name} are friends now`, null);
+  });
   // a finished game or download may be all a ready update was waiting for
   store.on('game-state', () => setTimeout(maybeRestartForUpdate, 1500));
   store.on('tasks', () => { if (!busyWith()) maybeRestartForUpdate(); });

@@ -410,10 +410,23 @@ public final class NimbusHud {
 	public static void render(Canvas c) {
 		try {
 			tick();
+			NimbusLan.tick();
 		} catch (Throwable ignored) {
 			// never let a helper break the HUD
 		}
-		Minecraft mc = mc();
+		try {
+			drawModules(c);
+		} finally {
+			try {
+				// with a menu open it's drawn by the menu instead, above its blur
+				if (Compat.screen() == null) NimbusLan.draw(c);
+			} catch (Throwable ignored) {
+				// the question box is extra
+			}
+		}
+	}
+
+	private static void drawModules(Canvas c) {
 		try {
 			if (Compat.hudHidden() || editing) return;
 			Screen open = Compat.screen();

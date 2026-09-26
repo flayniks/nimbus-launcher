@@ -11,9 +11,15 @@ let win = null;
 let launcher = null;
 let updater = null;
 let presence = null;
+let friends = null;
+let lan = null;
 const { Presence } = require('./src/core/presence');
 const { readJson, writeJson } = require('./src/core/util');
+const { Friends } = require('./src/core/friends');
+const { Lan } = require('./src/core/lan');
 
+// a separate data folder (tests, or a second profile) is a separate launcher with its own lock
+if (process.env.NIMBUS_DATA_DIR) app.setPath('userData', path.join(process.env.NIMBUS_DATA_DIR, '.electron'));
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 }
@@ -72,7 +78,11 @@ function createWindow() {
   win.webContents.on('will-navigate', (e) => e.preventDefault());
   win.on('maximize', () => send('win:state', { maximized: true }));
   win.on('unmaximize', () => send('win:state', { maximized: false }));
-  win.on('closed', () => { win = null; });
+  win.on('closed', () => {
+    win = null;
+    // the hidden Nimbus LAN window would otherwise keep the app alive
+    if (netWin && !netWin.isDestroyed() && !(launcher && launcher.running.size > 0)) netWin.destroy();
+  });
 }
 
 const LOADER_NAMES = { vanilla: 'Minecraft', fabric: 'Fabric', quilt: 'Quilt', forge: 'Forge', neoforge: 'NeoForge' };
@@ -212,6 +222,32 @@ function checkForUpdates(minGap = 0) {
   if (Date.now() - lastUpdateCheck < minGap) return;
   lastUpdateCheck = Date.now();
   updater.checkForUpdates().catch(() => {});
+}
+
+/** The hidden window that holds Nimbus LAN's WebRTC connections, made the first time it's needed. */
+let netWin = null;
+let netQueue = [];
+function netWindow() {
+  if (!netWin || netWin.isDestroyed()) {
+    netQueue = [];
+    netWin = new BrowserWindow({
+      show: false, width: 200, height: 200,
+      webPreferences: { preload: path.join(__dirname, 'net-preload.js'), contextIsolation: true, sandbox: true, backgroundThrottling: false },
+    });
+    netWin.loadFile(path.join(__dirname, 'src', 'renderer', 'net.html'));
+    netWin.webContents.once('did-finish-load', () => {
+      const q = netQueue;
+      netQueue = null;
+      for (const m of q) netWin.webContents.send('net:cmd', m);
+    });
+    netWin.on('closed', () => { netWin = null; });
+  }
+  return {
+    send(msg) {
+      if (netQueue) netQueue.push(msg);
+      else netWin.webContents.send('net:cmd', msg);
+    },
+  };
 }
 
 function send(channel, payload) {
@@ -531,6 +567,24 @@ function registerIpc() {
     await writeJson(launcher.paths.features, features);
     return menuState();
   });
+  // friends and chat
+  handle('friends:state', () => friends.snapshot());
+  handle('friends:refresh', async () => { await friends.beat(); return friends.snapshot(); });
+  handle('friends:add', (name) => friends.add(String(name || '')));
+  handle('friends:accept', (uuid) => friends.accept(uuid));
+  handle('friends:decline', (uuid) => friends.decline(uuid));
+  handle('friends:cancel', (uuid) => friends.cancel(uuid));
+  handle('friends:remove', (uuid) => friends.remove(uuid));
+  handle('friends:chat', (to, text) => friends.chat(to, String(text || '')));
+  handle('friends:history', (uuid) => friends.loadHistory(uuid));
+  handle('friends:read', (uuid) => friends.markRead(uuid));
+
+  // Nimbus LAN
+  handle('lan:state', () => lan.state());
+  handle('lan:join', (uuid) => lan.join(uuid));
+  handle('lan:cancel', () => lan.cancelJoin());
+  handle('lan:decide', (id, allow) => lan.decide(String(id), Boolean(allow)));
+
   handle('update:state', () => ({ ...updates, current: app.getVersion() }));
   handle('update:check', async () => {
     if (!updater) throw new Error(updates.message || 'Updates are not available here.');
@@ -572,6 +626,15 @@ app.whenReady().then(async () => {
     playing: () => launcher.running.size > 0,
   });
   presence.start();
+  friends = new Friends({ launcher, hosting: () => lan?.hostingInfo() || null });
+  friends.on('state', (st) => send('friends:state', st));
+  friends.on('message', (m) => send('friends:message', m));
+  friends.init().catch(() => {});
+  lan = new Lan({ launcher, friends, netWindow });
+  lan.on('state', (st) => send('lan:state', st));
+  if (process.env.NIMBUS_DATA_DIR) global.nimbusLan = lan; // tests reach in here
+  await lan.startBridge().catch(() => {});
+  ipcMain.on('net:event', (e, msg) => { if (netWin && e.sender === netWin.webContents) lan.netEvent(msg); });
   registerIpc();
   createWindow();
   updater = setupUpdater();

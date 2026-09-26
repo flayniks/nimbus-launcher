@@ -27,6 +27,8 @@ import org.lwjgl.glfw.GLFW;
 public final class Compat {
 	public static final int KEY_RIGHT_SHIFT = GLFW.GLFW_KEY_RIGHT_SHIFT;
 	public static final int KEY_C = GLFW.GLFW_KEY_C;
+	public static final int KEY_Y = GLFW.GLFW_KEY_Y;
+	public static final int KEY_N = GLFW.GLFW_KEY_N;
 
 	private Compat() {
 	}
@@ -182,5 +184,32 @@ public final class Compat {
 			// no dialog on this system
 		}
 		done.accept(path);
+	}
+
+	// ---------------------------------------------------------------- Nimbus LAN
+
+	public static boolean inSingleplayer() {
+		return Minecraft.getInstance().getSingleplayerServer() != null;
+	}
+
+	public static String worldName() {
+		try {
+			return Minecraft.getInstance().getSingleplayerServer().getWorldData().getLevelName();
+		} catch (Throwable t) {
+			return "World";
+		}
+	}
+
+	/** Opens the singleplayer world on a local port (what "Open to LAN" does) and returns the port, or -1. */
+	public static int publishLan() {
+		try {
+			var server = Minecraft.getInstance().getSingleplayerServer();
+			if (server == null) return -1;
+			if (server.isPublished()) return server.getPort();
+			int port = net.minecraft.util.HttpUtil.getAvailablePort();
+			return server.publishServer(server.getDefaultGameType(), false, port) ? port : -1;
+		} catch (Throwable t) {
+			return -1;
+		}
 	}
 }

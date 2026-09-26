@@ -1,0 +1,9 @@
+{
+  "name": "nimbus-website",
+  "private": true,
+  "description": "The Nimbus Launcher website and its friends service (Netlify).",
+  "type": "module",
+  "dependencies": {
+    "@netlify/blobs": "^11.1.1"
+  }
+}

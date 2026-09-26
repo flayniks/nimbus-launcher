@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nimbus Launcher — the Minecraft launcher that goes further</title>
+  <meta name="description" content="A fast, beautiful Minecraft: Java Edition launcher. Every version, every loader, Modrinth mods and modpacks, one-click FPS boost, skins, friends and Nimbus LAN.">
+  <meta name="theme-color" content="#07070d">
+  <meta property="og:title" content="Nimbus Launcher">
+  <meta property="og:description" content="The Minecraft launcher that goes further. Free for Windows.">
+  <meta property="og:image" content="/img/logo.png">
+  <link rel="icon" href="/img/logo.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Unbounded:wght@500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/site.css">
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three/three.module.min.js", "three/addons/": "/vendor/three/addons/" } }
+  </script>
+</head>
+<body class="loading">
+  <!-- the 3D world behind everything -->
+  <canvas id="world" aria-hidden="true"></canvas>
+  <canvas id="trail" aria-hidden="true"></canvas>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="flash" aria-hidden="true"></div>
+  <div class="cursor" aria-hidden="true"><i></i></div>
+
+  <!-- intro -->
+  <div class="intro" aria-hidden="true">
+    <div class="intro-count"><span>0</span>%</div>
+    <div class="intro-word">NIMBUS</div>
+  </div>
+
+  <header class="nav">
+    <a class="brand" href="#top"><img src="/img/mark.svg" alt=""> <b>Nimbus</b></a>
+    <nav>
+      <a href="#features" data-magnet>Features</a>
+      <a href="#inside" data-magnet>In game</a>
+      <a href="#friends" data-magnet>Friends</a>
+      <a class="btn small glow" href="#download" data-magnet>Download</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <!-- HERO: pinned while the camera flies through the ring -->
+    <section class="hero" id="hero">
+      <div class="hero-pin">
+        <div class="hero-copy">
+          <p class="eyebrow reveal-up"><span class="live-dot"></span><span id="liveLine">Free for Windows · v1.4</span></p>
+          <h1 class="mega" data-split>
+            <span class="line">THE LAUNCHER</span>
+            <span class="line">MINECRAFT</span>
+            <span class="line grad">DESERVES</span>
+          </h1>
+          <p class="lede reveal-up">Every version. Every loader. Mods, modpacks, shaders and resource packs in one click, an FPS boost that actually works, skins, friends, and worlds you can join with a single approval.</p>
+          <div class="cta reveal-up">
+            <a class="btn big glow" href="https://github.com/flayniks/nimbus-launcher/releases/latest/download/Nimbus-Launcher-Setup.exe" data-download data-magnet>
+              <span class="btn-shine"></span>
+              <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+              <span>Download for Windows</span>
+            </a>
+            <a class="btn big ghost" href="#features" data-magnet>See what it does</a>
+          </div>
+          <p class="fine reveal-up"><span id="versionLine">Windows 10 / 11 · 64-bit</span> · Updates itself</p>
+        </div>
+        <div class="scroll-hint"><span>Scroll</span><i></i></div>
+      </div>
+    </section>
+
+    <!-- numbers -->
+    <section class="stats" id="stats">
+      <div class="stat"><b data-count="0" id="statOnline">0</b><span>online right now</span></div>
+      <div class="stat"><b data-count="0" id="statPlayers">0</b><span>players</span></div>
+      <div class="stat"><b data-count="900" data-plus>0</b><span>Minecraft versions</span></div>
+      <div class="stat"><b data-count="5">0</b><span>mod loaders</span></div>
+    </section>
+
+    <!-- marquee -->
+    <div class="marquee" aria-hidden="true">
+      <div class="track">
+        <span>VANILLA</span><i>✦</i><span>FABRIC</span><i>✦</i><span>QUILT</span><i>✦</i><span>FORGE</span><i>✦</i><span>NEOFORGE</span><i>✦</i><span>MODRINTH</span><i>✦</i><span>SHADERS</span><i>✦</i><span>MODPACKS</span><i>✦</i><span>FPS BOOST</span><i>✦</i><span>NIMBUS LAN</span><i>✦</i>
+        <span>VANILLA</span><i>✦</i><span>FABRIC</span><i>✦</i><span>QUILT</span><i>✦</i><span>FORGE</span><i>✦</i><span>NEOFORGE</span><i>✦</i><span>MODRINTH</span><i>✦</i><span>SHADERS</span><i>✦</i><span>MODPACKS</span><i>✦</i><span>FPS BOOST</span><i>✦</i><span>NIMBUS LAN</span><i>✦</i>
+      </div>
+    </div>
+
+    <!-- features -->
+    <section class="features" id="features">
+      <h2 class="title" data-scramble>BUILT DIFFERENT</h2>
+      <p class="sub reveal-up">Everything you'd want from a launcher, and the things no other launcher does.</p>
+      <div class="cards">
+        <article class="card tilt" data-glow>
+          <div class="icon">⛏</div>
+          <h3>Every version, ever</h3>
+          <p>Releases, snapshots, April Fools, beta, alpha, even 2009's pre-classic. With the right Java downloaded for you.</p>
+        </article>
+        <article class="card tilt" data-glow>
+          <div class="icon">🧩</div>
+          <h3>Every loader</h3>
+          <p>Vanilla, Fabric, Quilt, Forge and NeoForge, each with its own version picker. Instances stay separate and tidy.</p>
+        </article>
+        <article class="card tilt" data-glow>
+          <div class="icon">🔎</div>
+          <h3>Modrinth built in</h3>
+          <p>Search mods, modpacks, shaders and resource packs, filtered to what fits your instance. Dependencies come along.</p>
+        </article>
+        <article class="card tilt" data-glow>
+          <div class="icon">⚡</div>
+          <h3>One-click FPS boost</h3>
+          <p>Performance mods, a tuned garbage collector, smart memory and video settings. More frames, fewer stutters.</p>
+        </article>
+        <article class="card tilt" data-glow>
+          <div class="icon">👕</div>
+          <h3>Skins &amp; capes</h3>
+          <p>Search thousands of skins or copy anyone's by name, try them on a 3D player, and switch capes. In game too.</p>
+        </article>
+        <article class="card tilt" data-glow>
+          <div class="icon">🎨</div>
+          <h3>Make it yours</h3>
+          <p>Themes, colours, animated backgrounds or your own picture, and a switch for every single animation.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- horizontal gallery, pinned -->
+    <section class="gallery" id="gallery">
+      <div class="gallery-pin">
+        <h2 class="title side" data-scramble>SEE IT MOVE</h2>
+        <div class="gallery-track">
+          <figure class="shot"><img src="/img/home.webp" alt="Nimbus Launcher home" loading="lazy"><figcaption>Home</figcaption></figure>
+          <figure class="shot"><img src="/img/looks.webp" alt="Two custom looks" loading="lazy"><figcaption>Your look</figcaption></figure>
+          <figure class="shot"><img src="/img/skins.webp" alt="Skins and capes" loading="lazy"><figcaption>Skins &amp; capes</figcaption></figure>
+          <figure class="shot"><img src="/img/boost.webp" alt="FPS Boost" loading="lazy"><figcaption>FPS Boost</figcaption></figure>
+          <figure class="shot"><img src="/img/settings-animations.webp" alt="Animation settings" loading="lazy"><figcaption>Every animation</figcaption></figure>
+          <figure class="shot"><img src="/img/settings-appearance.webp" alt="Appearance settings" loading="lazy"><figcaption>Appearance</figcaption></figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- in game -->
+    <section class="inside" id="inside">
+      <h2 class="title" data-scramble>IT GOES IN GAME</h2>
+      <p class="sub reveal-up">Nimbus Core ships inside the launcher and rides along in every Fabric and Quilt game.</p>
+      <div class="split">
+        <div class="stack">
+          <figure class="float f1"><img src="/img/loading-screen.webp" alt="Nimbus loading screen" loading="lazy"></figure>
+          <figure class="float f2"><img src="/img/ingame-hud.webp" alt="HUD in a world" loading="lazy"></figure>
+          <figure class="float f3"><img src="/img/ingame-features.webp" alt="Nimbus Features menu" loading="lazy"></figure>
+        </div>
+        <ul class="points">
+          <li class="reveal-up"><b>An animated loading screen</b> instead of Mojang's red one. Spin, bounce, splash, pulse or flip.</li>
+          <li class="reveal-up"><b>Nimbus Features</b>: 18 HUD boxes you drag anywhere, zoom, fullbright, FPS presets and 20+ tweaks.</li>
+          <li class="reveal-up"><b>Skins &amp; Capes</b> right from the title screen and the pause menu.</li>
+          <li class="reveal-up"><b>Your own menu background</b>: a picture, the Nimbus glow, or the classic panorama.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- friends -->
+    <section class="friends" id="friends">
+      <div class="friends-copy">
+        <h2 class="title" data-scramble>PLAY TOGETHER</h2>
+        <p class="sub reveal-up">Add friends by their Minecraft name, chat inside the launcher, and join their worlds over <b>Nimbus LAN</b>: they get a message in game, press yes, and you're in. No port forwarding, no server.</p>
+      </div>
+      <div class="phone reveal-up">
+        <div class="msg in"><img src="https://mc-heads.net/avatar/Notch/32" alt=""><p>yo you on?</p></div>
+        <div class="msg out"><p>hosting my survival world rn</p></div>
+        <div class="msg in"><img src="https://mc-heads.net/avatar/Notch/32" alt=""><p>let me in 👀</p></div>
+        <div class="toast-demo">
+          <img src="/img/mark.svg" alt="">
+          <div><b>Notch wants to join your world</b><span>Press Y to let them in · N to say no</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- final CTA -->
+    <section class="final" id="download">
+      <h2 class="giant" data-split><span class="line">READY?</span></h2>
+      <p class="sub reveal-up">Free. Open source. Updates itself. Takes a minute to install.</p>
+      <a class="btn huge glow" href="https://github.com/flayniks/nimbus-launcher/releases/latest/download/Nimbus-Launcher-Setup.exe" data-download data-magnet>
+        <span class="btn-shine"></span>
+        <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+        <span>Download Nimbus</span>
+      </a>
+      <p class="fine"><a href="https://github.com/flayniks/nimbus-launcher" target="_blank" rel="noopener">Source on GitHub</a> · <a href="https://github.com/flayniks/nimbus-launcher/releases" target="_blank" rel="noopener">All releases</a></p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <img src="/img/mark.svg" alt=""> Nimbus Launcher · not affiliated with Mojang or Microsoft.
+  </footer>
+
+  <script type="module" src="/js/site.js"></script>
+</body>
+</html>

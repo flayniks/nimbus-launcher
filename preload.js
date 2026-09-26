@@ -11,7 +11,7 @@ async function call(channel, ...args) {
   return res.data;
 }
 
-const EVENTS = new Set(['task', 'game:log', 'game:state', 'boost:step', 'win:state', 'update:state']);
+const EVENTS = new Set(['task', 'game:log', 'game:state', 'boost:step', 'win:state', 'update:state', 'friends:state', 'friends:message', 'lan:state']);
 
 contextBridge.exposeInMainWorld('nimbus', {
   platform: process.platform,
@@ -115,6 +115,24 @@ contextBridge.exposeInMainWorld('nimbus', {
     clear: () => call('cache:clear'),
   },
   tasks: { list: () => call('tasks:list') },
+  lan: {
+    state: () => call('lan:state'),
+    join: (uuid) => call('lan:join', uuid),
+    cancel: () => call('lan:cancel'),
+    decide: (id, allow) => call('lan:decide', id, allow),
+  },
+  friends: {
+    state: () => call('friends:state'),
+    refresh: () => call('friends:refresh'),
+    add: (name) => call('friends:add', name),
+    accept: (uuid) => call('friends:accept', uuid),
+    decline: (uuid) => call('friends:decline', uuid),
+    cancel: (uuid) => call('friends:cancel', uuid),
+    remove: (uuid) => call('friends:remove', uuid),
+    chat: (to, text) => call('friends:chat', to, text),
+    history: (uuid) => call('friends:history', uuid),
+    read: (uuid) => call('friends:read', uuid),
+  },
   updates: {
     state: () => call('update:state'),
     check: () => call('update:check'),

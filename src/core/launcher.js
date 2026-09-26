@@ -236,16 +236,18 @@ class Launcher extends EventEmitter {
     }
 
     await this.builtin.ensure(paths, this.instances, instance);
-    // packs added since last time are switched on, so they are simply there in game
-    await packs.enableNewPacks({
-      gameDir: paths.gameDir(instance.id),
-      mcVersion: instance.mcVersion,
-      stateFile: path.join(paths.instanceDir(instance.id), 'packs-seen.json'),
-    }).catch(() => {});
 
     stage('Downloading game files');
     const version = await resolveVersion(paths, versionId);
     const install = await installVersion(ctx, version, { deep, skipAssets, label: `Minecraft ${instance.mcVersion}` });
+    // packs added since last time are switched on, so they are simply there in game
+    // (after the download: the game jar says which pack format this version takes)
+    await packs.enableNewPacks({
+      gameDir: paths.gameDir(instance.id),
+      mcVersion: instance.mcVersion,
+      stateFile: path.join(paths.instanceDir(instance.id), 'packs-seen.json'),
+      clientJar: install.clientJar,
+    }).catch(() => {});
     const gameDir = paths.gameDir(instance.id);
     await fsp.mkdir(gameDir, { recursive: true });
     stage('Preparing assets');
@@ -265,7 +267,11 @@ class Launcher extends EventEmitter {
 
   getLog(id) { return this.logs.get(id) || []; }
 
-  async launch(id, { detach = false } = {}) {
+  /**
+   * @param {object} [opts]
+   * @param {string} [opts.joinServer] join this address as soon as the game is up (Nimbus LAN)
+   */
+  async launch(id, { detach = false, joinServer = null } = {}) {
     if (this.running.has(id)) throw new Error('That instance is already running');
     const account = await this.accounts.activeSession(this.oauth());
     // Play pressed while the first install is still going: let it finish, then launch
@@ -294,12 +300,16 @@ class Launcher extends EventEmitter {
         speed: { relaxed: 0.6, normal: 1, snappy: 1.6 }[st.gameAnimSpeed] || 1,
       };
       for (const [k, v] of Object.entries(anim)) extraJvm.push(`-Dnimbus.anim.${k}=${v}`);
+      // Nimbus LAN: Nimbus Core talks to the launcher through this local address
+      if (this.bridgeUrl) extraJvm.push(`-Dnimbus.bridge=${this.bridgeUrl}`, `-Dnimbus.mc=${inst.mcVersion}`, `-Dnimbus.loader=${inst.loader}`);
+      // tests: extra JVM flags (e.g. authlib pointed at a stand-in Mojang)
+      if (process.env.NIMBUS_EXTRA_JVM) extraJvm.push(...process.env.NIMBUS_EXTRA_JVM.split(' ').filter(Boolean));
       // tests swap Mojang and the gallery for local stand-ins
       for (const [env, prop] of [['NIMBUS_SERVICES_URL', 'services'], ['NIMBUS_MOJANG_URL', 'mojang'], ['NIMBUS_GALLERY_URL', 'gallery'], ['NIMBUS_TEXTURES_URL', 'textures']]) {
         if (process.env[env]) extraJvm.push(`-Dnimbus.${prop}=${process.env[env]}`);
       }
       const built = buildArguments({
-        paths: this.paths, version: prep.version, install: prep.install, instance: inst, account,
+        paths: this.paths, version: prep.version, install: prep.install, instance: joinServer ? { ...inst, server: joinServer } : inst, account,
         gameDir: prep.gameDir, gameAssets: prep.gameAssets, clientId: this.settings.clientToken, extraJvm,
       });
       if (inst.boost?.gpu) await boost.preferDedicatedGpu(prep.java.bin);
@@ -328,7 +338,7 @@ class Launcher extends EventEmitter {
       boost.applyPriority(child.pid, inst);
       await this.instances.update(id, { lastPlayed: Date.now() });
       if (detach) return { detached: true };
-      this.running.set(id, { child, started });
+      this.running.set(id, { child, started, instance: inst });
       this.emit('game-state', { instanceId: id, running: true });
       return { pid: child.pid };
     } finally {

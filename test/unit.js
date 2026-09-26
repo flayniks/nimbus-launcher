@@ -418,7 +418,7 @@ test('packs: new resource and shader packs switch on once, and stay off if you t
   let res = await packs.enableNewPacks({ gameDir: game, mcVersion: '1.21.1', stateFile: state });
   assert.deepEqual(res.resourcepacks, ['Faithful.zip', 'Folder Pack']);
   assert.deepEqual(JSON.parse(read().resourcePacks), ['vanilla', 'fabric', 'file/Faithful.zip', 'file/Folder Pack'], 'appended on top, disabled files ignored');
-  assert.deepEqual(JSON.parse(read().incompatibleResourcePacks), ['file/Faithful.zip', 'file/Folder Pack']);
+  assert.deepEqual(JSON.parse(read().incompatibleResourcePacks), [], 'no game jar to compare with: nothing is marked incompatible');
   assert.equal(read().fov, '0.0', 'other options untouched');
 
   // switched off in game: stays off on the next launch
@@ -500,4 +500,112 @@ test('presence: counts an install once, each window once, and reads the busier w
     delete process.env.NIMBUS_COUNTER_URL;
     server.close();
   }
+});
+
+test('packs: only packs for another version go on the incompatible list, and old mistakes are repaired', async () => {
+  const AdmZip = require('adm-zip');
+  const packs = require('../src/core/packs');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'nimbus-packfmt-'));
+  const game = path.join(root, 'game');
+  const dir = path.join(game, 'resourcepacks');
+  fs.mkdirSync(dir, { recursive: true });
+  const zip = (file, entries) => { const z = new AdmZip(); for (const [n, t] of Object.entries(entries)) z.addFile(n, Buffer.from(t)); z.writeZip(file); };
+  const jar = path.join(root, 'client.jar');
+  zip(jar, { 'version.json': JSON.stringify({ pack_version: { resource: 34, data: 48 } }) });
+  zip(path.join(dir, 'Fits.zip'), { 'pack.mcmeta': JSON.stringify({ pack: { pack_format: 34, description: '' } }) });
+  zip(path.join(dir, 'Old.zip'), { 'pack.mcmeta': JSON.stringify({ pack: { pack_format: 15, description: '' } }) });
+  zip(path.join(dir, 'Range.zip'), { 'pack.mcmeta': JSON.stringify({ pack: { pack_format: 15, supported_formats: [15, 40] } }) });
+  const read = () => Object.fromEntries(fs.readFileSync(path.join(game, 'options.txt'), 'utf8').trim().split('\n').map((l) => [l.slice(0, l.indexOf(':')), l.slice(l.indexOf(':') + 1)]));
+
+  // a 1.4.3 install: everything was put on the incompatible list, and the game dropped the compatible packs
+  const state = path.join(root, 'packs-seen.json');
+  fs.writeFileSync(state, JSON.stringify({ resourcepacks: ['Fits.zip', 'Old.zip', 'Range.zip'], shaderpacks: [] }));
+  fs.writeFileSync(path.join(game, 'options.txt'), 'resourcePacks:["vanilla","file/Old.zip"]\nincompatibleResourcePacks:["file/Fits.zip","file/Old.zip"]\n');
+  const res = await packs.enableNewPacks({ gameDir: game, mcVersion: '1.21.1', stateFile: state, clientJar: jar });
+  assert.deepEqual(res.resourcepacks.sort(), ['Fits.zip', 'Range.zip'], 'the dropped packs get switched back on');
+  assert.deepEqual(JSON.parse(read().resourcePacks), ['vanilla', 'file/Old.zip', 'file/Fits.zip', 'file/Range.zip']);
+  assert.deepEqual(JSON.parse(read().incompatibleResourcePacks), ['file/Old.zip'], 'only the pack for another version stays marked');
+  assert.equal(JSON.parse(fs.readFileSync(state, 'utf8')).v, 2);
+
+  // formats written as major/minor (1.21.9 and 26.x)
+  assert.equal(packs.packFits({ min_format: [84, 0], max_format: 90 }, { major: 84, minor: 0 }), true);
+  assert.equal(packs.packFits({ min_format: 97, max_format: [97, 0] }, { major: 97, minor: 1 }), false);
+  assert.equal(packs.packFits({ pack_format: 34, supported_formats: { min_inclusive: 30, max_inclusive: 34 } }, { major: 32, minor: 0 }), true);
+  assert.equal(packs.packFits({ description: 'no format' }, { major: 34, minor: 0 }), null);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('friends service: Mojang sign-in, friend requests, presence, chat and the relay', async () => {
+  const { createApi, memoryStore } = await import('../website/lib/friends-api.mjs');
+  const store = memoryStore();
+  const people = { alex: '0123456789abcdef0123456789abcdef', steve: 'fedcba9876543210fedcba9876543210', eve: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' };
+  const names = { alex: 'Alex', steve: 'Steve', eve: 'Eve' };
+  const joined = new Map();
+  const fakeFetch = async (url) => {
+    const u = new URL(url);
+    if (u.pathname.startsWith('/users/profiles/minecraft/')) {
+      const n = decodeURIComponent(u.pathname.split('/').pop()).toLowerCase();
+      return people[n] ? new Response(JSON.stringify({ id: people[n], name: names[n] })) : new Response('', { status: 404 });
+    }
+    if (u.pathname === '/session/minecraft/hasJoined') {
+      const who = joined.get(u.searchParams.get('serverId'));
+      return who === u.searchParams.get('username') ? new Response(JSON.stringify({ id: people[who.toLowerCase()], name: who })) : new Response(null, { status: 204 });
+    }
+    return new Response('', { status: 500 });
+  };
+  const api = createApi({ store, fetch: fakeFetch, sessionServer: 'http://mojang', profileApi: 'http://mojang' });
+  const call = async (path, body, token) => {
+    const res = await api(new Request(`http://site/api/${path}`, { method: 'POST', headers: token ? { authorization: `Bearer ${token}` } : {}, body: JSON.stringify(body || {}) }));
+    return { ...(await res.json()), http: res.status };
+  };
+  const login = async (who) => {
+    const { serverId } = await call('login/start');
+    joined.set(serverId, names[who]); // the launcher's POST /session/minecraft/join, in effect
+    return call('login/finish', { name: names[who], serverId });
+  };
+
+  const alex = await login('alex');
+  const steve = await login('steve');
+  assert.equal(alex.uuid, people.alex);
+  assert.equal(alex.token.length, 64);
+  // someone who didn't really join the session is refused
+  const { serverId } = await call('login/start');
+  assert.equal((await call('login/finish', { name: 'Eve', serverId })).http, 401);
+  assert.equal((await call('beat', {}, 'f'.repeat(64))).http, 401);
+
+  // alex asks, steve sees the request and accepts
+  assert.equal((await call('friends/add', { name: 'steve' }, alex.token)).http, 200);
+  assert.equal((await call('friends/add', { name: 'nobodyhere' }, alex.token)).http, 404);
+  let s = await call('beat', { status: 'online' }, steve.token);
+  assert.deepEqual(s.requests.map((r) => r.name), ['Alex']);
+  assert.equal(s.inbox[0].type, 'friend-request');
+  assert.equal((await call('chat/send', { to: people.alex, text: 'hi' }, steve.token)).http, 403, 'no chat before being friends');
+  await call('friends/accept', { uuid: people.alex }, steve.token);
+
+  // presence and hosting
+  await call('beat', { status: 'playing', playing: { mc: '1.21.1', loader: 'fabric' }, hosting: { mc: '1.21.1', loader: 'fabric', world: 'Survival' } }, steve.token);
+  let a = await call('beat', {}, alex.token);
+  assert.equal(a.friends.length, 1);
+  assert.equal(a.friends[0].online, true);
+  assert.equal(a.friends[0].hosting.world, 'Survival');
+  assert.ok(a.inbox.some((m) => m.type === 'friend-added'));
+
+  // chat: delivered once, kept in history
+  await call('chat/send', { to: people.steve, text: 'let me in 👀' }, alex.token);
+  s = await call('beat', {}, steve.token);
+  assert.deepEqual(s.inbox.filter((m) => m.type === 'chat').map((m) => m.text), ['let me in 👀']);
+  assert.equal((await call('beat', {}, steve.token)).inbox.length, 0, 'each message arrives once');
+  assert.deepEqual((await call('chat/history', { with: people.alex }, steve.token)).messages.map((m) => m.text), ['let me in 👀']);
+
+  // relay: join request goes through between friends only
+  await call('relay', { to: people.steve, type: 'join-request', data: { id: 'r1' } }, alex.token);
+  s = await call('beat', {}, steve.token);
+  assert.deepEqual(s.inbox.map((m) => [m.type, m.name, m.data.id]), [['join-request', 'Alex', 'r1']]);
+  assert.equal((await call('relay', { to: people.steve, type: 'rm -rf', data: {} }, alex.token)).http, 400);
+  const eve = await (async () => { const st = await call('login/start'); joined.set(st.serverId, 'Eve'); return call('login/finish', { name: 'Eve', serverId: st.serverId }); })();
+  assert.equal((await call('relay', { to: people.steve, type: 'join-request', data: {} }, eve.token)).http, 403);
+
+  // unfriend
+  await call('friends/remove', { uuid: people.steve }, alex.token);
+  assert.equal((await call('beat', {}, alex.token)).friends.length, 0);
 });

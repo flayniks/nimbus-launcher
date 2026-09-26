@@ -15,6 +15,8 @@ const seconds = Number((flags.find((f) => f.startsWith('--seconds=')) || '--seco
 const flag = (name) => (flags.find((f) => f.startsWith(`--${name}=`)) || '').slice(name.length + 3) || null;
 // --mods=a.jar,b.jar copies jars into the instance; --shots=dir screenshots the X display every second
 const extraMods = (flag('mods') || '').split(',').filter(Boolean);
+// --addfile=mod:/x.jar,resourcepack:/y.zip goes through the launcher's own "Add file" path
+const addFiles = (flag('addfile') || '').split(',').filter(Boolean).map((s) => s.split(/:(.+)/));
 const shotsDir = flag('shots');
 const extraJvm = (flag('jvm') || '').split(' ').filter(Boolean);
 
@@ -39,6 +41,10 @@ const extraJvm = (flag('jvm') || '').split(' ').filter(Boolean);
     inst = await launcher.instances.create({ name: `smoke ${loader} ${mc}`, mcVersion: mc, loader, loaderVersion: loaderVersion || null });
   }
   const fs = require('fs');
+  for (const [type, file] of addFiles) {
+    const res = await launcher.addContentFiles(inst.id, type, [file]);
+    console.log(`addfile ${type}: added ${res.added.join(',') || '-'} skipped ${res.skipped.map((x) => x.name).join(',') || '-'}`);
+  }
   for (const jar of extraMods) {
     fs.mkdirSync(path.join(launcher.paths.gameDir(inst.id), 'mods'), { recursive: true });
     fs.copyFileSync(jar, path.join(launcher.paths.gameDir(inst.id), 'mods', path.basename(jar)));

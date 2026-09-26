@@ -76,3 +76,17 @@ api.on('update:state', (u) => {
   store.update = u;
   store.emit('update', u);
 });
+
+// friends: the latest list, and each message as it arrives
+store.friends = { signedIn: false, friends: [], requests: [], outgoing: [], unread: {} };
+store.lan = { hosting: null, joining: null };
+api.friends.state().then((s) => { store.friends = s; store.emit('friends', s); }).catch(() => {});
+api.on('friends:state', (s) => {
+  store.friends = s;
+  store.emit('friends', s);
+});
+api.on('friends:message', (m) => store.emit('friend-message', m));
+api.on('lan:state', (s) => {
+  store.lan = s;
+  store.emit('lan', s);
+});

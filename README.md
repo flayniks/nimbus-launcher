@@ -11,6 +11,8 @@ A fast, good-looking launcher for **Minecraft: Java Edition** with licensed (Mic
 - **Your own files.** An *Add file* button on every Browse tab and instance tab (mods, packs, shaders), or just drop files on the window. Resource packs and shader packs you add, however you add them (even straight into the folder), are switched on for you the next time you play.
 - **Nimbus Features in game.** Press *Nimbus Features* in the pause menu or title screen (or Right Shift) for 18 HUD boxes you can drag and resize (FPS, coordinates, keystrokes, CPS, ping and more), zoom, fullbright, one-click FPS presets and 20+ other options.
 - **Make it yours.** Six themes, accent colours (or your own two), animated backgrounds (aurora, starfield, neon grid) or any picture, glass, card styles, corners, UI size and sidebar labels. Every animation, in the launcher, the launch splash and the game, has its own switch.
+- **Friends & chat.** Add friends by their Minecraft name, see who's online and what they're playing, and chat in the launcher. Messages wait for friends who are offline.
+- **Nimbus LAN.** Open your singleplayer world with the *Nimbus LAN* button in the pause menu. Friends see "Hosting" and press *Join*. You get "NICK wants to join your world" in game, press **Y**, and they're in: their launcher starts the right Minecraft and connects straight to your world. No port forwarding, no server.
 - **Player counter.** The top of the window shows how many people have Nimbus open, how many are playing, and how many have installed it. It is anonymous and can be turned off.
 - **FPS Boost.** One click tunes an instance for more, steadier frames (details below).
 - **Right Java, automatically.** Nimbus downloads Mojang's own Java runtime for each version (8, 16, 17, 21 or 25), so you never install Java yourself.
@@ -130,6 +132,19 @@ Settings has an **Appearance** section and an **Animations** section.
 - **Animations in the launcher:** on/off, speed, how pages change (rise, fade, slide, zoom or none), lists sliding in, what cards do on hover (lift, tilt, glow or nothing) and the moving background.
 - **Launch splash:** on/off, particles, and how the logo moves: **Spin**, **Bounce** (hops with squash and stretch), **Splash** (drops in and lands in rippling water), **Pulse** (beats and sends out waves), **Flip**, **Still** or **Minimal** (just the name). Every choice has a live preview card.
 - **In the game** (through Nimbus Core): the Nimbus loading screen (off shows Mojang's), particles, animation speed, the title screen badge, the moving glow behind the Nimbus menus, and the same logo styles picked separately for **when the game starts** and **when resource packs load** (F3+T, or changing packs in game).
+
+## Friends, chat and Nimbus LAN
+
+The *Friends* page (people icon in the sidebar) signs in with the Microsoft account you play with. Nimbus proves the account is yours the same way joining a server does, through Mojang's session server, so no password or token goes to Nimbus. The friends service is a small Netlify Function that lives next to the website ([`website/`](website/README.md)).
+
+- **Add** someone by their Minecraft name. They get a request and a badge; once they accept, you see each other's status: online, playing a version, or hosting a world.
+- **Chat** in the launcher. A message you're not looking at pops up with a *Reply* button. History is kept for each friend.
+- **Nimbus LAN**, in Fabric and Quilt games:
+  1. In your world, open the pause menu and press **Nimbus LAN**. Your friends' launchers now show *Hosting "World"* and a **Join** button.
+  2. When a friend presses Join, you get **"NICK wants to join your world"** at the top of the screen, with 90 seconds to press **Y** (let them in) or **N** (no).
+  3. On a yes, the two launchers connect directly (WebRTC). Your friend's launcher starts a Minecraft on the same version (it makes one if they don't have it) and joins your world. Only the handshake goes through the friends service; the game traffic flows straight between the two computers.
+
+A few networks (some mobile and school or office networks) block direct connections between computers. Nimbus then says it couldn't reach your friend's computer.
 
 ## Player counter
 

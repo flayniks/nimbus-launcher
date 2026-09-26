@@ -24,6 +24,8 @@ import net.minecraft.client.gui.screens.Screen;
 public final class Compat {
 	public static final int KEY_RIGHT_SHIFT = 344;
 	public static final int KEY_C = 67;
+	public static final int KEY_Y = 89;
+	public static final int KEY_N = 78;
 
 	private static Method legacyIsKeyDown;
 	private static boolean sdl = true;
@@ -68,6 +70,8 @@ public final class Compat {
 		return switch (glfwKey) {
 			case 344 -> 229; // right shift
 			case 67 -> 6; // C
+			case 89 -> 28; // Y
+			case 78 -> 17; // N
 			default -> glfwKey;
 		};
 	}
@@ -176,5 +180,49 @@ public final class Compat {
 		} catch (Throwable e) {
 			done.accept(null);
 		}
+	}
+
+	// ---------------------------------------------------------------- Nimbus LAN
+
+	public static boolean inSingleplayer() {
+		return Minecraft.getInstance().getSingleplayerServer() != null;
+	}
+
+	public static String worldName() {
+		try {
+			return Minecraft.getInstance().getSingleplayerServer().getWorldData().getLevelName();
+		} catch (Throwable t) {
+			return "World";
+		}
+	}
+
+	/**
+	 * Opens the singleplayer world on a local port (what "Open to LAN" does) and returns the
+	 * port, or -1. 26.1/26.2 take (GameType, cheats, port); 26.3 takes (MultiplayerScope, guest commands, port).
+	 */
+	public static int publishLan() {
+		try {
+			var server = Minecraft.getInstance().getSingleplayerServer();
+			if (server == null) return -1;
+			if (server.isPublished()) return server.getPort();
+			int port = net.minecraft.util.HttpUtil.getAvailablePort();
+			for (Method m : server.getClass().getMethods()) {
+				if (!m.getName().equals("publishServer") || m.getParameterCount() != 3) continue;
+				Class<?> first = m.getParameterTypes()[0];
+				Object mode;
+				if (first == net.minecraft.world.level.GameType.class) mode = server.getDefaultGameType();
+				else if (first.isEnum()) mode = enumConstant(first, "LAN");
+				else continue;
+				return Boolean.TRUE.equals(m.invoke(server, mode, false, port)) ? port : -1;
+			}
+		} catch (Throwable ignored) {
+			// no world to open
+		}
+		return -1;
+	}
+
+	@SuppressWarnings({"unchecked", "rawtypes"})
+	private static Object enumConstant(Class<?> type, String name) {
+		return Enum.valueOf((Class) type, name);
 	}
 }
