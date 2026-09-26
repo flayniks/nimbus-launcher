@@ -1,6 +1,7 @@
 package dev.flayniks.nimbus.mixin;
 
 import dev.flayniks.nimbus.GuiCanvas;
+import dev.flayniks.nimbus.MenuBackground;
 import dev.flayniks.nimbus.NimbusArt;
 import dev.flayniks.nimbus.NimbusHud;
 import dev.flayniks.nimbus.SkinsScreen;
@@ -65,5 +66,11 @@ public abstract class TitleScreenMixin extends Screen {
 			NimbusArt.featuresIcon(canvas, at[0], at[1], now - nimbus$shown);
 			NimbusArt.skinsIcon(canvas, at[0], at[2]);
 		}
+	}
+
+	/** 1.20 – 1.20.4 draw the panorama here, before the logo and buttons: paint the menu background over it. */
+	@Inject(method = "method_25394(Lnet/minecraft/class_332;IIF)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/class_766;method_3317(FF)V", shift = At.Shift.AFTER), require = 0, remap = false)
+	private void nimbus$legacyBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick, CallbackInfo ci) {
+		MenuBackground.draw(new GuiCanvas(graphics), graphics);
 	}
 }

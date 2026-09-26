@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld('nimbus', {
   },
   look: {
     pickBackground: () => call('look:pickBackground'),
+    useBackground: (file) => call('look:useBackground', file),
+    menu: () => call('menu:get'),
+    setMenu: (choice) => call('menu:set', choice),
     background: () => call('look:background'),
   },
   settings: {

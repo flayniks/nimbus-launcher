@@ -18,6 +18,10 @@ Like the loading screen, it is painted with rectangles and text only. Skins are 
 
 Right Shift opens the menu and C zooms. On 26.3, which reads keys through SDL, the key codes are translated at runtime.
 
+## Menu background
+
+`MenuBackground` replaces the spinning panorama behind the title screen and the menus with the Nimbus glow or a picture (`PanoramaMixin`; 1.20–1.20.4 draw it from `TitleScreenMixin`). The picture comes from `-Dnimbus.menu.image=<png>` (the launcher's `menu-background.png`), or `config/nimbus-background.png`. It is decoded by `Png`, scaled and cropped to the window by `Picture` on a background thread, written back out as a PNG and handed to Minecraft's own image loader, so the only texture calls are the few in `Compat`. *Choose…* opens LWJGL's tinyfd file dialog, or SDL's on 26.3, which no longer ships tinyfd.
+
 ## Animation options
 
 The launcher passes *Settings → Animations* in as system properties: `nimbus.anim.loading`, `particles`, `badge`, `menus` (each `true`/`false`), `nimbus.anim.speed` (a multiplier), and `nimbus.anim.style` / `nimbus.anim.reloadStyle` (`spin`, `bounce`, `splash`, `pulse`, `flip` or `still`) for the logo while the game starts and while resource packs reload. With `loading=false` every loading-screen hook steps aside and Mojang's screen shows as usual.

@@ -281,7 +281,8 @@ class Launcher extends EventEmitter {
       // Nimbus Core's in-game Skins & Capes menu shares the launcher's wardrobe
       extraJvm.push(`-Dnimbus.wardrobe=${this.wardrobe.dir}`);
       // one Nimbus Features setup for every instance, and the animation choices from Settings
-      extraJvm.push(`-Dnimbus.features=${path.join(this.paths.root, 'nimbus-features.json')}`);
+      extraJvm.push(`-Dnimbus.features=${this.paths.features}`);
+      extraJvm.push(`-Dnimbus.menu.image=${this.paths.menuImage}`);
       const st = this.settings;
       const anim = {
         loading: st.gameLoading !== false,

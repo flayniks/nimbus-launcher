@@ -224,6 +224,8 @@ final class Features {
 		ROWS.add(tilt);
 		ROWS.add(vanillaToggle(util, "No view bobbing", "The camera stops bobbing while you walk", (o) -> o.bobView(), true));
 		ROWS.add(toggle(util, "inventory.watermark", true, "Inventory watermark", "The Nimbus badge in the corner while your inventory is open"));
+		ROWS.add(choice(util, "menu.background", 0, "Menu background", "Behind the title screen and menus: Minecraft's panorama, the Nimbus glow or your own picture", MenuBackground.MODES));
+		ROWS.add(action(util, "Background picture", "Pick a PNG from your computer for the menu background", "Choose…", MenuBackground::choose));
 		ROWS.add(toggle(util, "menu.shortcut", true, "Right Shift opens this menu", "Press Right Shift in game to open Nimbus Features"));
 	}
 

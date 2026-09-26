@@ -230,17 +230,80 @@ export function render(page) {
       clear(bgExtra);
       if (s().background === 'image') {
         bgExtra.append(card(
-          row('Picture', 'Shown behind everything. Blur and darken it so text stays easy to read.', h('button.btn.sm', { icon: 'image', onclick: pickPicture }, 'Change')),
+          row('Picture', 'Shown behind everything. Blur and darken it so text stays easy to read.', h('button.btn.sm', { icon: 'image', onclick: pickPicture }, 'Choose another')),
           row('Blur', null, slider('bgBlur', { min: 0, max: 30, step: 1, fallback: 8, unit: 'px', live: (v) => backdrop()?.style.setProperty('--bg-blur', `${v}px`) })),
           row('Darken', null, slider('bgDim', { min: 0, max: 90, step: 5, fallback: 45, unit: '%', live: (v) => backdrop()?.style.setProperty('--bg-dim', String(v / 100)) }))));
       }
     }
     drawBgs();
 
+    // drop a picture anywhere on this page to use it
+    const dropZone = h('div.drop-hint', icon('image'), h('span', h('b', 'Drop a picture here'), ' or pick ', h('b', 'Your picture'), '. PNG, JPG, WebP or GIF, any size.'));
+    root.addEventListener('dragover', (e) => {
+      if (![...(e.dataTransfer?.items || [])].some((i) => i.kind === 'file')) return;
+      e.preventDefault();
+      root.classList.add('dropping');
+    });
+    root.addEventListener('dragleave', (e) => { if (!root.contains(e.relatedTarget)) root.classList.remove('dropping'); });
+    root.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      root.classList.remove('dropping');
+      const file = e.dataTransfer?.files?.[0];
+      if (!file) return;
+      try {
+        store.settings = await api.look.useBackground(api.app.pathForFile(file));
+        applyLook(store.settings);
+        drawBgs();
+        ok('Background changed');
+      } catch (err) { fail('Could not use that picture', err); }
+    });
+
+    // the background behind Minecraft's title screen and menus
+    const menuCards = h('div.choice-grid');
+    const menuExtra = h('div');
+    let menu = { mode: 'minecraft', preview: null };
+    const MENU = [
+      ['minecraft', 'Minecraft', 'The normal spinning panorama'],
+      ['nimbus', 'Nimbus', 'The dark Nimbus glow with sparks'],
+      ['picture', 'Your picture', 'Any PNG or JPG'],
+    ];
+    const setMenu = async (choice) => {
+      try {
+        menu = await api.look.setMenu(choice);
+        drawMenu();
+      } catch (err) { fail('Could not change the menu background', err); }
+    };
+    function drawMenu() {
+      clear(menuCards);
+      for (const [id, name, desc] of MENU) {
+        const swatch = id === 'picture' && menu.preview
+          ? h('div.swatch', { style: { backgroundImage: `url("${menu.preview}")`, backgroundSize: 'cover', backgroundPosition: 'center' } }, h('span.check', icon('check')))
+          : h(`div.swatch.menu-${id}`, id === 'nimbus' ? h('img', { src: 'img/logo.svg', alt: '' }) : id === 'picture' ? icon('image') : null, h('span.check', icon('check')));
+        const b = h(`button.choice${menu.mode === id ? '.on' : ''}`, {
+          title: desc,
+          onclick: () => (id === 'picture' && !menu.preview ? setMenu({ from: s().bgImage ? 'launcher' : 'pick' }) : setMenu({ mode: id })),
+        }, swatch, h('span', name, h('small', desc)));
+        b.dataset.menu = id;
+        menuCards.appendChild(b);
+      }
+      clear(menuExtra);
+      if (menu.mode === 'picture') {
+        menuExtra.append(card(row('Game menu picture', 'Fitted to the game window. Used by Fabric and Quilt instances next time they start.',
+          h('div.row-gap',
+            s().bgImage ? h('button.btn.sm', { icon: 'copy', onclick: () => setMenu({ from: 'launcher' }) }, 'Same as launcher') : null,
+            h('button.btn.sm', { icon: 'image', onclick: () => setMenu({ from: 'pick' }) }, 'Choose picture')))));
+      }
+    }
+    drawMenu();
+    api.look.menu().then((m) => { menu = m; drawMenu(); }).catch(() => {});
+
     root.append(
       h('div.group-title', 'Theme'), themes,
       h('div.group-title', 'Accent colour'), card(h('div.setting', accents)),
-      h('div.group-title', 'Background'), bgs, bgExtra,
+      h('div.group-title', 'Background'), bgs, dropZone, bgExtra,
+      h('div.group-title', 'Game menus'),
+      h('p.lead', { style: { margin: '0', color: 'var(--muted)', fontSize: '12.5px' } }, 'Behind Minecraft\u2019s title screen and menus, for Fabric and Quilt instances. You can also change it in game: Nimbus Features \u2192 Utilities.'),
+      menuCards, menuExtra,
       h('div.group-title', 'Surfaces'),
       card(
         row('Glass', 'Frosted, see-through bars and panels.', onOff('glass')),

@@ -2,7 +2,16 @@ package dev.flayniks.nimbus;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.platform.Window;
+import com.mojang.blaze3d.platform.NativeImage;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.lang.reflect.Method;
+import java.util.function.Consumer;
+import org.lwjgl.PointerBuffer;
+import org.lwjgl.system.MemoryStack;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.resources.Identifier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.OptionInstance;
 import net.minecraft.client.Options;
@@ -112,5 +121,60 @@ public final class Compat {
 
 	public static Screen hudEditor(Screen parent) {
 		return new HudEditor(parent);
+	}
+
+	// ---------------------------------------------------------------- pictures (menu background)
+
+	/** The window's size in real pixels. */
+	public static int[] framebuffer() {
+		Window w = Minecraft.getInstance().getWindow();
+		return new int[] {w.getWidth(), w.getHeight()};
+	}
+
+	/** Turns a PNG into a texture Minecraft can draw; returns its id. */
+	public static Object makeTexture(byte[] png, String name) throws IOException {
+		NativeImage image = NativeImage.read(new ByteArrayInputStream(png));
+		Identifier id = Identifier.fromNamespaceAndPath("nimbus", name);
+		Minecraft.getInstance().getTextureManager().register(id, new DynamicTexture(() -> "Nimbus menu background", image));
+		return id;
+	}
+
+	public static void releaseTexture(Object id) {
+		Minecraft.getInstance().getTextureManager().release((Identifier) id);
+	}
+
+	/** Draws a whole texture over the screen, w x h in GUI units. */
+	public static void blitFull(Object graphics, Object id, int w, int h, int texW, int texH) {
+		((GuiGraphicsExtractor) graphics).blit((Identifier) id, 0, 0, w, h, 0f, 1f, 0f, 1f);
+	}
+
+	/**
+	 * A native "open file" dialog for a PNG; gives null when cancelled. 26.1 and 26.2 still
+	 * ship LWJGL's tinyfd; 26.3 runs on SDL, which has its own (asynchronous) dialog.
+	 */
+	public static void pickPng(Consumer<String> done) {
+		try {
+			Class<?> tinyfd = Class.forName("org.lwjgl.util.tinyfd.TinyFileDialogs");
+			Method open = tinyfd.getMethod("tinyfd_openFileDialog", CharSequence.class, CharSequence.class, PointerBuffer.class, CharSequence.class, boolean.class);
+			String path;
+			try (MemoryStack stack = MemoryStack.stackPush()) {
+				PointerBuffer filters = stack.mallocPointer(1);
+				filters.put(stack.UTF8("*.png"));
+				filters.flip();
+				path = (String) open.invoke(null, "Choose a background picture", null, filters, "PNG pictures", false);
+			}
+			done.accept(path);
+			return;
+		} catch (ClassNotFoundException e) {
+			// SDL below
+		} catch (Throwable e) {
+			done.accept(null);
+			return;
+		}
+		try {
+			SdlPicker.open(done);
+		} catch (Throwable e) {
+			done.accept(null);
+		}
 	}
 }

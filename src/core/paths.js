@@ -16,6 +16,9 @@ function createPaths(root) {
     cache: path.join(root, 'cache'),
     settings: path.join(root, 'settings.json'),
     accounts: path.join(root, 'accounts.json'),
+    // Nimbus Core: the in-game Features setup and the menu background picture, shared by every instance
+    features: path.join(root, 'nimbus-features.json'),
+    menuImage: path.join(root, 'menu-background.png'),
     versionDir: (id) => path.join(root, 'versions', id),
     versionJson: (id) => path.join(root, 'versions', id, `${id}.json`),
     versionJar: (id) => path.join(root, 'versions', id, `${id}.jar`),

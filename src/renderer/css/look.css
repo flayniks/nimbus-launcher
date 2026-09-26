@@ -242,3 +242,16 @@
 .pv-flip img { animation: pv-flip 2.2s cubic-bezier(0.6, -0.25, 0.3, 1.25) infinite; }
 @keyframes pv-flip { 0%, 30% { transform: translateY(0) rotateX(0deg); } 50% { transform: translateY(-12px) rotateX(-180deg); } 70%, 100% { transform: translateY(0) rotateX(-360deg); } }
 body.no-anim .anim-pv * { animation: none !important; }
+
+/* Appearance: drop a picture on the page; the game menu background cards */
+.drop-hint { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; border: 1px dashed var(--border-2); color: var(--muted); font-size: 12.5px; transition: border-color 0.2s, background 0.2s, color 0.2s; }
+.drop-hint svg { width: 18px; height: 18px; flex: none; }
+.drop-hint b { color: var(--text-2); }
+.settings-section.dropping .drop-hint { border-color: var(--a1); background: color-mix(in srgb, var(--a1) 14%, transparent); color: var(--text); }
+.settings-section.dropping .drop-hint b { color: var(--text); }
+.swatch.menu-minecraft { background: linear-gradient(#7fb7ff 0 58%, #6aa84f 58% 70%, #8b5a2b 70%); }
+.swatch.menu-nimbus { display: grid; place-items: center; background: radial-gradient(circle at 50% 55%, rgba(124, 92, 255, 0.45), transparent 65%), #0b0d14; }
+.swatch.menu-nimbus img { width: 54px; }
+.swatch.menu-picture { display: grid; place-items: center; color: var(--muted); background: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.04) 0 8px, transparent 8px 16px); }
+.swatch.menu-picture svg { width: 24px; height: 24px; }
+.choice small { display: block; margin-top: 2px; color: var(--muted); font-weight: 500; font-size: 11.5px; line-height: 1.3; }

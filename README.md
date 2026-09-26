@@ -125,6 +125,8 @@ Settings has an **Appearance** section and an **Animations** section.
 ![Animations settings](docs/settings-animations.png)
 
 - **Appearance:** theme (Midnight, Void, Nebula, Ocean, Forest, Ember), accent colour (six presets or two colours of your own), background (Aurora, Starfield, Neon grid, Plain or your own picture with blur and darken), glass and how frosted it is, card style, corners, UI size (90–125%) and sidebar labels.
+- **Your own background:** *Settings → Appearance → Background → Your picture*, or drop a picture anywhere on that page. PNG, JPG, WebP or GIF of any size: big ones are scaled down, not refused.
+- **Game menus:** what's behind Minecraft's title screen and menus in Fabric and Quilt instances: the normal **Minecraft** panorama, the **Nimbus** glow, or **your picture** (the launcher's, or another one). It can also be changed in game: *Nimbus Features → Utilities → Menu background*, with a *Choose…* button for a PNG.
 - **Animations in the launcher:** on/off, speed, how pages change (rise, fade, slide, zoom or none), lists sliding in, what cards do on hover (lift, tilt, glow or nothing) and the moving background.
 - **Launch splash:** on/off, particles, and how the logo moves: **Spin**, **Bounce** (hops with squash and stretch), **Splash** (drops in and lands in rippling water), **Pulse** (beats and sends out waves), **Flip**, **Still** or **Minimal** (just the name). Every choice has a live preview card.
 - **In the game** (through Nimbus Core): the Nimbus loading screen (off shows Mojang's), particles, animation speed, the title screen badge, the moving glow behind the Nimbus menus, and the same logo styles picked separately for **when the game starts** and **when resource packs load** (F3+T, or changing packs in game).

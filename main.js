@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, shell, dialog, safeStorage, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, safeStorage, Menu, nativeImage } = require('electron');
 const path = require('path');
 const { Launcher } = require('./src/core/launcher');
 const auth = require('./src/core/auth');
@@ -12,6 +12,7 @@ let launcher = null;
 let updater = null;
 let presence = null;
 const { Presence } = require('./src/core/presence');
+const { readJson, writeJson } = require('./src/core/util');
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -450,26 +451,85 @@ function registerIpc() {
     return data;
   });
   // a background picture of your own
-  handle('look:pickBackground', async () => {
-    const res = await dialog.showOpenDialog(win, { title: 'Pick a background picture', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }] });
-    if (res.canceled || !res.filePaths[0]) return launcher.getSettings();
-    const src = res.filePaths[0];
-    const stat = await require('fs').promises.stat(src);
-    if (stat.size > 12 * 1024 * 1024) throw new Error('That picture is over 12 MB. Pick a smaller one.');
-    const dest = path.join(launcher.paths.root, `background${path.extname(src).toLowerCase()}`);
-    await require('fs').promises.copyFile(src, dest);
+  const fsp = require('fs').promises;
+  const PICTURE_TYPES = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'];
+  const pickPicture = async (title) => {
+    const res = await dialog.showOpenDialog(win, { title, properties: ['openFile'], filters: [{ name: 'Pictures', extensions: PICTURE_TYPES }] });
+    return res.canceled ? null : res.filePaths[0] || null;
+  };
+  /** A picture as a size we can work with: big photos are scaled down, never refused. */
+  const loadPicture = (src, longest) => {
+    let img = nativeImage.createFromPath(src);
+    if (img.isEmpty()) return null;
+    const { width, height } = img.getSize();
+    const scale = Math.min(1, longest / Math.max(width, height));
+    if (scale < 1) img = img.resize({ width: Math.round(width * scale), height: Math.round(height * scale), quality: 'best' });
+    return img;
+  };
+  const useBackground = async (src) => {
+    const ext = path.extname(src).slice(1).toLowerCase();
+    if (!PICTURE_TYPES.includes(ext)) throw new Error('That is not a picture. Use a PNG, JPG, WebP or GIF.');
+    const stat = await fsp.stat(src);
+    const root = launcher.paths.root;
+    // a new name every time, so the new picture shows even when it has the same type as the old one
+    const stamp = Date.now().toString(36);
+    const img = ext === 'gif' ? null : loadPicture(src, 2560);
+    let dest;
+    if (img) {
+      dest = path.join(root, `background-${stamp}.jpg`);
+      await fsp.writeFile(dest, img.toJPEG(90));
+    } else {
+      if (stat.size > 40 * 1024 * 1024) throw new Error('That picture is over 40 MB. Save it as a PNG or JPG and try again.');
+      dest = path.join(root, `background-${stamp}.${ext}`);
+      await fsp.copyFile(src, dest);
+    }
+    for (const f of await fsp.readdir(root)) {
+      if (/^background(-[a-z0-9]+)?\.(png|jpe?g|webp|gif|bmp)$/i.test(f) && path.join(root, f) !== dest) await fsp.rm(path.join(root, f), { force: true });
+    }
     backgroundCache = null;
     return launcher.setSettings({ background: 'image', bgImage: dest });
+  };
+  handle('look:pickBackground', async () => {
+    const src = await pickPicture('Pick a background picture');
+    return src ? useBackground(src) : launcher.getSettings();
   });
+  handle('look:useBackground', (src) => useBackground(String(src || '')));
   let backgroundCache = null;
   handle('look:background', async () => {
     const file = launcher.settings.bgImage;
     if (!file) return null;
     if (backgroundCache?.file === file) return backgroundCache.url;
-    const buf = await require('fs').promises.readFile(file);
-    const ext = path.extname(file).slice(1).replace('jpg', 'jpeg');
+    const buf = await fsp.readFile(file);
+    const ext = path.extname(file).slice(1).toLowerCase().replace('jpg', 'jpeg');
     backgroundCache = { file, url: `data:image/${ext};base64,${buf.toString('base64')}` };
     return backgroundCache.url;
+  });
+
+  // the background behind Minecraft's title screen and menus (Nimbus Core reads it)
+  const MENU_MODES = ['minecraft', 'nimbus', 'picture'];
+  const menuState = async () => {
+    const values = (await readJson(launcher.paths.features, {}))?.values || {};
+    const mode = MENU_MODES[Math.max(0, Math.min(2, Number(values['menu.background']) || 0))];
+    const img = nativeImage.createFromPath(launcher.paths.menuImage);
+    const preview = img.isEmpty() ? null : img.resize({ width: 320, quality: 'good' }).toDataURL();
+    return { mode, preview };
+  };
+  handle('menu:get', menuState);
+  handle('menu:set', async ({ mode, from } = {}) => {
+    if (from) {
+      const src = from === 'launcher' ? launcher.settings.bgImage : await pickPicture('Pick a picture for the game menus');
+      if (!src) return menuState();
+      const img = loadPicture(src, 3840);
+      if (!img) throw new Error('The game can only use PNG and JPG pictures. Pick one of those.');
+      await fsp.writeFile(launcher.paths.menuImage, img.toPNG());
+      mode = 'picture';
+    }
+    const index = MENU_MODES.indexOf(mode);
+    if (index < 0) throw new Error('Unknown menu background.');
+    const features = (await readJson(launcher.paths.features, {})) || {};
+    features.values = { ...(features.values || {}), 'menu.background': index };
+    await writeJson(launcher.paths.features, features);
+    return menuState();
   });
   handle('update:state', () => ({ ...updates, current: app.getVersion() }));
   handle('update:check', async () => {
