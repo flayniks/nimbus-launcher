@@ -695,3 +695,50 @@ test('discord: talks to the Discord app over its local socket, and clears the st
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('friends service: cosmetics are saved by their owner and anyone can look them up', async () => {
+  const { createApi, memoryStore } = await import('../website/lib/friends-api.mjs');
+  const store = memoryStore();
+  const api = createApi({ store, devAuth: true });
+  const call = async (path, body, token) => {
+    const res = await api(new Request(`http://x/api/${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) }));
+    return { http: res.status, ...(await res.json()) };
+  };
+  const alex = await call('login/finish', { dev: true, uuid: '11111111111111111111111111111111', name: 'Alex' });
+  // only you can set yours, and only real ids go in
+  assert.equal((await call('cosmetics/set', { hat: 'crown_royal' })).http, 401);
+  assert.equal((await call('cosmetics/set', { hat: 'Crown Royal!' }, alex.token)).http, 400);
+  const set = await call('cosmetics/set', { hat: 'crown_royal', pet: 'dragon_ember', wings: null, aura: 'aura_runes' }, alex.token);
+  assert.deepEqual(set.worn, { hat: 'crown_royal', pet: 'dragon_ember', wings: null, aura: 'aura_runes' });
+  // anyone can look, by uuid (dashes or not) or by name on offline-mode servers
+  const got = await call('cosmetics/get', { players: [{ uuid: '11111111-1111-1111-1111-111111111111' }, { uuid: '99999999999999999999999999999999', name: 'alex' }, { uuid: '22222222222222222222222222222222', name: 'Nobody' }] });
+  assert.equal(got.http, 200);
+  assert.equal(got.cosmetics['11111111-1111-1111-1111-111111111111'].hat, 'crown_royal');
+  assert.equal(got.cosmetics['99999999999999999999999999999999'].pet, 'dragon_ember');
+  assert.equal(got.cosmetics['22222222222222222222222222222222'], undefined);
+});
+
+test('cosmetics: what you wear is saved, written for the game and shared', async () => {
+  const { Cosmetics } = require('../src/core/cosmetics');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nimbus-cos-'));
+  const uploads = [];
+  const launcher = { paths: { root: dir, cosmetics: path.join(dir, 'nimbus-cosmetics.json') }, settings: {} };
+  const friends = { call: async (p, body) => { uploads.push([p, body]); return { ok: true }; } };
+  const c = await new Cosmetics({ launcher, friends }).init();
+  await c.set('hat', 'halo_angel');
+  await c.set('pet', 'ghost');
+  await assert.rejects(() => c.set('hat', 'Not A Real Id'));
+  await assert.rejects(() => c.set('cape', 'halo_angel'));
+  const game = JSON.parse(fs.readFileSync(launcher.paths.cosmetics, 'utf8'));
+  assert.equal(game.hat, 'halo_angel');
+  assert.equal(game.pet, 'ghost');
+  await c.set('hat', null);
+  assert.equal(JSON.parse(fs.readFileSync(launcher.paths.cosmetics, 'utf8')).hat, null);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(uploads.at(-1), ['cosmetics/set', { hat: null, pet: 'ghost', wings: null, aura: null }]);
+  assert.equal(c.state().sync.state, 'shared');
+  // it comes back after a restart
+  const again = await new Cosmetics({ launcher, friends }).init();
+  assert.equal(again.state().worn.pet, 'ghost');
+  fs.rmSync(dir, { recursive: true, force: true });
+});

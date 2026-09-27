@@ -9,16 +9,18 @@ import * as settings from './pages/settings.js';
 import * as instance from './pages/instance.js';
 import * as skins from './pages/skins.js';
 import * as friendsPage from './pages/friends.js';
+import * as cosmeticsPage from './pages/cosmetics.js';
 import { head as skinHead } from './skinart.js';
 import { presencePill } from './look.js';
 
-registerPages({ home, browse, boost, accounts, settings, instance, skins, friends: friendsPage });
+registerPages({ home, browse, boost, accounts, settings, instance, skins, friends: friendsPage, cosmetics: cosmeticsPage });
 
 const NAV = [
   { page: 'home', icon: 'home', label: 'Home' },
   { page: 'browse', icon: 'compass', label: 'Browse mods & packs' },
   { page: 'boost', icon: 'zap', label: 'FPS Boost' },
   { page: 'skins', icon: 'shirt', label: 'Skins & capes' },
+  { page: 'cosmetics', icon: 'sparkles', label: 'Cosmetics' },
   { page: 'friends', icon: 'users', label: 'Friends' },
   { page: 'settings', icon: 'settings', label: 'Settings' },
 ];

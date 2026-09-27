@@ -43,6 +43,7 @@ const DEFAULT_SETTINGS = {
   uiScale: 100,
   sidebarLabels: false,
   showCounter: true,
+  showOtherCosmetics: true, // other Nimbus players' hats, pets, wings and auras in game
   discordStatus: true, // what you're playing, on your Discord profile
   discordServer: true, // include the server's name (never an IP address)
   shareOnline: true,
@@ -304,6 +305,9 @@ class Launcher extends EventEmitter {
       for (const [k, v] of Object.entries(anim)) extraJvm.push(`-Dnimbus.anim.${k}=${v}`);
       // Nimbus LAN: Nimbus Core talks to the launcher through this local address
       if (this.bridgeUrl) extraJvm.push(`-Dnimbus.bridge=${this.bridgeUrl}`, `-Dnimbus.mc=${inst.mcVersion}`, `-Dnimbus.loader=${inst.loader}`);
+      // cosmetics: yours from this file, everyone else's from the friends service
+      extraJvm.push(`-Dnimbus.cosmetics=${this.paths.cosmetics}`);
+      if (this.apiBase) extraJvm.push(`-Dnimbus.api=${this.apiBase}`);
       // tests: extra JVM flags (e.g. authlib pointed at a stand-in Mojang)
       if (process.env.NIMBUS_EXTRA_JVM) extraJvm.push(...process.env.NIMBUS_EXTRA_JVM.split(' ').filter(Boolean));
       // tests swap Mojang and the gallery for local stand-ins

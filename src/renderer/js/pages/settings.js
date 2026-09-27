@@ -140,6 +140,9 @@ export function render(page) {
       card(
         row('When the game starts', 'Hiding the launcher frees memory and GPU time for Minecraft.'),
         h('div.setting', seg('onLaunch', [['hide', 'Hide launcher'], ['keep', 'Keep open'], ['close', 'Close launcher']], 'hide'))),
+      h('div.group-title', 'Cosmetics'),
+      card(
+        row('Show other players’ cosmetics', 'Hats, pets, wings and auras other Nimbus players wear, in Fabric and Quilt games. Yours always show.', onOff('showOtherCosmetics'))),
       h('div.group-title', 'Discord'),
       card(
         row('Show what I’m playing', 'Your Discord profile shows Nimbus, the Minecraft version and how long you’ve played. Needs the Discord app open on this computer.', onOff('discordStatus')),

@@ -11,7 +11,7 @@ async function call(channel, ...args) {
   return res.data;
 }
 
-const EVENTS = new Set(['task', 'game:log', 'game:state', 'boost:step', 'win:state', 'update:state', 'friends:state', 'friends:message', 'lan:state']);
+const EVENTS = new Set(['task', 'game:log', 'game:state', 'boost:step', 'win:state', 'update:state', 'friends:state', 'friends:message', 'lan:state', 'cosmetics:state']);
 
 contextBridge.exposeInMainWorld('nimbus', {
   platform: process.platform,
@@ -120,6 +120,10 @@ contextBridge.exposeInMainWorld('nimbus', {
     join: (uuid) => call('lan:join', uuid),
     cancel: () => call('lan:cancel'),
     decide: (id, allow) => call('lan:decide', id, allow),
+  },
+  cosmetics: {
+    state: () => call('cosmetics:state'),
+    set: (slot, id) => call('cosmetics:set', slot, id),
   },
   friends: {
     state: () => call('friends:state'),

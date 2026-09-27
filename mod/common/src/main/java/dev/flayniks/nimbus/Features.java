@@ -236,6 +236,7 @@ final class Features {
 		ROWS.add(choice(util, "menu.background", 0, "Menu background", "Behind the title screen and menus: Minecraft's panorama, the Nimbus glow or your own picture", MenuBackground.MODES));
 		ROWS.add(action(util, "Background picture", "Pick a PNG from your computer for the menu background", "Choose…", MenuBackground::choose));
 		ROWS.add(toggle(util, "menu.shortcut", true, "Right Shift opens this menu", "Press Right Shift in game to open Nimbus Features"));
+		ROWS.add(toggle(util, "cosmetics.others", true, "Other players' cosmetics", "Show the hats, pets, wings and auras other Nimbus players wear. Pick yours in the launcher"));
 
 		int fx = 3;
 		Row crazy = toggle(fx, "fx.crazy", false, "Crazy animations", "A LOT of wild effects: menus burst in, rainbow cursor, glowing buttons, LEVEL UP explosions, combos and more");

@@ -8,6 +8,7 @@ const ONLINE_MS = 90_000;
 const SESSION_MS = 30 * 24 * 3600_000;
 const CHAT_KEEP = 200;
 const RELAY_TYPES = new Set(['join-request', 'join-reply', 'join-cancel', 'signal']);
+const COSMETIC_SLOTS = ['hat', 'pet', 'wings', 'aura'];
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
   status,
@@ -195,6 +196,37 @@ export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sess
       return json({ messages });
     },
 
+    // ---- cosmetics: what each player wears, for every Nimbus player to see
+    'POST cosmetics/set': async (req, body, who) => {
+      const worn = {};
+      for (const slot of COSMETIC_SLOTS) {
+        const id = body[slot];
+        if (id === null || id === undefined || id === '') worn[slot] = null;
+        else if (typeof id === 'string' && /^[a-z0-9_]{2,40}$/.test(id)) worn[slot] = id;
+        else return fail(400, `Bad ${slot}.`);
+      }
+      await store.set(`cosmetics/${who.uuid}`, { name: who.name, ...worn, at: Date.now() });
+      await store.set(`cosname/${who.name.toLowerCase()}`, { uuid: who.uuid });
+      return json({ ok: true, worn });
+    },
+    // anyone may look: the game asks about the players around it, by uuid (or by name on
+    // offline-mode servers, where uuids aren't the real ones)
+    'POST cosmetics/get': async (req, body) => {
+      const players = Array.isArray(body.players) ? body.players.slice(0, 80) : [];
+      const out = {};
+      await Promise.all(players.map(async (p) => {
+        const key = String(p?.uuid || p?.name || '');
+        let uuid = p?.uuid ? cleanUuid(p.uuid) : null;
+        let found = uuid && validUuid(uuid) ? await store.get(`cosmetics/${uuid}`) : null;
+        if (!found && typeof p?.name === 'string' && /^[A-Za-z0-9_]{1,16}$/.test(p.name)) {
+          const byName = await store.get(`cosname/${p.name.toLowerCase()}`);
+          if (byName) { uuid = byName.uuid; found = await store.get(`cosmetics/${uuid}`); }
+        }
+        if (found) out[key] = Object.fromEntries(COSMETIC_SLOTS.map((s) => [s, found[s] || null]));
+      }));
+      return json({ cosmetics: out });
+    },
+
     // ---- relay for Nimbus LAN: join requests, answers and the WebRTC handshake
     'POST relay': async (req, body, who) => {
       const to = cleanUuid(body.to);
@@ -230,7 +262,7 @@ export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sess
     let body = {};
     try { body = req.method === 'POST' ? await req.json() : {}; } catch { return fail(400, 'Bad JSON.'); }
     try {
-      if (path.startsWith('login/')) return await route(req, body, null);
+      if (path.startsWith('login/') || path === 'cosmetics/get') return await route(req, body, null);
       const who = await me(req);
       if (!who) return fail(401, 'Sign in again.');
       return await route(req, body, who);

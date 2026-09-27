@@ -191,6 +191,68 @@ public final class Compat {
 		done.accept(path);
 	}
 
+	// ---------------------------------------------------------------- cosmetics (1.21.9+ path)
+
+	private static Method cameraPos;
+	private static Method cameraDetached;
+	private static Method deltaTracker;
+	private static Method partialTick;
+
+	/**
+	 * {x, y, z, partial tick, 1 if third person} for the camera, found by name: Camera.position()
+	 * and Minecraft.getDeltaTracker() were renamed in 1.21.9.
+	 */
+	public static double[] camera() {
+		try {
+			Minecraft mc = Minecraft.getInstance();
+			Object cam = mc.gameRenderer.getMainCamera();
+			if (cameraPos == null) {
+				for (String n : new String[] {"method_71156", "method_19326", "position", "getPosition"}) {
+					try {
+						cameraPos = cam.getClass().getMethod(n);
+						break;
+					} catch (NoSuchMethodException ignored) {
+						// older or newer name
+					}
+				}
+				for (String n : new String[] {"method_19333", "isDetached"}) {
+					try {
+						cameraDetached = cam.getClass().getMethod(n);
+						break;
+					} catch (NoSuchMethodException ignored) {
+						// try the other name
+					}
+				}
+				for (Method m : Minecraft.class.getMethods()) {
+					if (m.getParameterCount() == 0 && (m.getName().equals("method_61966") || m.getName().equals("method_60646") || m.getName().equals("getDeltaTracker"))) {
+						deltaTracker = m;
+						break;
+					}
+				}
+			}
+			net.minecraft.world.phys.Vec3 p = (net.minecraft.world.phys.Vec3) cameraPos.invoke(cam);
+			float pt = 1f;
+			if (deltaTracker != null) {
+				Object dt = deltaTracker.invoke(mc);
+				if (partialTick == null) {
+					for (String n : new String[] {"method_60637", "getGameTimeDeltaPartialTick"}) {
+						try {
+							partialTick = dt.getClass().getMethod(n, boolean.class);
+							break;
+						} catch (NoSuchMethodException ignored) {
+							// try the other name
+						}
+					}
+				}
+				if (partialTick != null) pt = (Float) partialTick.invoke(dt, false);
+			}
+			boolean detached = cameraDetached != null && (Boolean) cameraDetached.invoke(cam);
+			return new double[] {p.x, p.y, p.z, pt, detached ? 1 : 0};
+		} catch (Throwable t) {
+			return null;
+		}
+	}
+
 	// ---------------------------------------------------------------- crazy animations
 
 	private static Method selectedMethod;

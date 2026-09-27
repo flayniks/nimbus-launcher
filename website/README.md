@@ -25,6 +25,7 @@ To preview it, run any static server in `public/`, for example `python3 -m http.
 - **Sign-in** uses Mojang's own server check. The service hands out a random server id, the launcher "joins" it with the player's session, and the service asks Mojang (`hasJoined`) to confirm. The service never sees a password or token. It stores a random session token.
 - **Presence:** each launcher calls `POST /api/beat` about every 15 seconds (every 2.5 seconds while chatting or joining). The reply carries friends, requests and new messages.
 - **Chat** keeps the last 200 messages per pair.
+- **Cosmetics:** `cosmetics/set` saves what a signed-in player wears; `cosmetics/get` (no sign-in) answers for a batch of players by uuid, or by name for offline-mode servers.
 - **Relay** passes Nimbus LAN join requests, answers and the WebRTC handshake, between friends only. Game traffic never goes through the service; it flows directly between the two players' computers.
 
 `test/friends-server.mjs` runs the same code locally with an in-memory store, for tests.

@@ -14,11 +14,13 @@ let presence = null;
 let friends = null;
 let lan = null;
 let discord = null;
+let cosmetics = null;
 const { Presence } = require('./src/core/presence');
 const { readJson, writeJson } = require('./src/core/util');
 const { Friends } = require('./src/core/friends');
 const { Lan } = require('./src/core/lan');
 const { DiscordStatus } = require('./src/core/discord');
+const { Cosmetics } = require('./src/core/cosmetics');
 const { services } = require('./src/core/services');
 
 // a separate data folder (tests, or a second profile) is a separate launcher with its own lock
@@ -339,8 +341,11 @@ function registerIpc() {
   });
 
   handle('settings:get', () => launcher.getSettings());
+  handle('cosmetics:state', () => cosmetics.state());
+  handle('cosmetics:set', (slot, id) => cosmetics.set(slot, id));
   handle('settings:set', async (patch) => {
     const out = await launcher.setSettings(patch);
+    if ('showOtherCosmetics' in patch) await syncCosmeticsSetting();
     if ('discordStatus' in patch || 'discordServer' in patch) discord?.poke(0);
     return out;
   });
@@ -641,6 +646,17 @@ app.whenReady().then(async () => {
   lan.on('state', (st) => send('lan:state', st));
   if (process.env.NIMBUS_DATA_DIR) global.nimbusLan = lan; // tests reach in here
   await lan.startBridge().catch(() => {});
+  cosmetics = new Cosmetics({ launcher, friends });
+  cosmetics.on('state', (st) => send('cosmetics:state', st));
+  await cosmetics.init().catch(() => {});
+  // share what you wear as soon as the friends sign-in works
+  let signedIn = false;
+  friends.on('state', (st) => {
+    if (st.signedIn && !signedIn) cosmetics.upload().catch(() => {});
+    signedIn = Boolean(st.signedIn);
+  });
+  friends.apiBase().then((b) => { launcher.apiBase = b; }).catch(() => {});
+  await syncCosmeticsSetting();
   discord = new DiscordStatus({
     launcher,
     lan,
@@ -663,6 +679,13 @@ app.whenReady().then(async () => {
   if (updater) win.webContents.once('did-finish-load', () => setTimeout(() => checkForUpdates(), 1200));
   app.on('activate', () => { if (!win) createWindow(); });
 });
+
+/** "Show other players' cosmetics" lives in the shared features file, where the game reads it. */
+async function syncCosmeticsSetting() {
+  const features = (await readJson(launcher.paths.features, {})) || {};
+  features.toggles = { ...(features.toggles || {}), 'cosmetics.others': launcher.settings.showOtherCosmetics !== false };
+  await writeJson(launcher.paths.features, features);
+}
 
 // clear the Discord status on the way out, so it doesn't linger until Discord notices
 let discordCleared = false;

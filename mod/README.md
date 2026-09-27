@@ -25,6 +25,18 @@ Right Shift opens the menu and C zooms. On 26.3, which reads keys through SDL, t
 - **Menus** (`ScreenFxMixin`, around `Screen.renderWithTooltip`, `extractRenderStateWithTooltipAndSubtitles` on 26.x): a new screen gets a block dissolve, shutters or a zoom slam (the zoom scales the whole screen through the pose stack for 0.4 s), then the cursor trail, click bursts, the glow around the hovered widget (found by position, looking inside lists) and the floating sparkles are drawn on top.
 - **In game** (from `NimbusHud.render`): it compares health, XP level and progress, the hotbar slot (`Compat.selectedSlot`: a field up to 1.21.4, a method from 1.21.5), what's in your inventory and how you're moving with the last frame, and plays the matching effect. Hits come from `AttackMixin` on `MultiPlayerGameMode.attack`, so short clicks at a low frame rate are never missed. Chat opening and closing is ignored, and pickups wait a moment after a container closes so items falling back out of a crafting grid don't count.
 
+## Cosmetics
+
+`CosmeticModel` reads `assets/nimbus/cosmetics.json` (built by `tools/cosmetics`): parts made of boxes, with animations (spin, sway, flap, bob, orbit, pulse, hop, trick, twitch) evaluated with the same maths as the launcher's previews. `Cosmetics` works out, for each player drawn, where each slot sits (hats ride the head, wings the body, auras the feet, pets follow a point beside the shoulder with a little lag), fills a `CosmeticMesh` with camera-relative quads in three batches (solid, see-through, glowing particles) and runs the particles. Yours come from the file the launcher writes (`-Dnimbus.cosmetics`); other players' from the friends service (`-Dnimbus.api`, `cosmetics/get`), asked in batches in the background and kept for three minutes, looked up by name when the server is in offline mode. `cosmetics.others` switches other players' off.
+
+Drawing is the version-specific part (`CosmeticsDraw`, `LevelRendererMixin`):
+
+- **1.20–1.21.8:** after `LevelRenderer.renderEntity` for each player, straight into the frame's buffers. The vertex call is found at run time (float colours up to 1.20.6, an int after), and so are the render types.
+- **1.21.9–1.21.11:** entities are submitted instead of drawn; after `submitEntities` (hooked by its intermediary name) every player's cosmetics are submitted as custom geometry through a proxy of the callback interface, which this jar, built against 1.21.1, can only name at run time. 1.21.11 moved the render type factories to `RenderTypes`.
+- **26.x:** the same, called directly.
+
+The white texture everything is tinted from is registered at run time: assets inside the mod jar only load with Fabric API, which Nimbus doesn't need.
+
 ## Ping
 
 Vanilla only updates your latency in the tab list every 30 seconds, and many servers never send it, so a Ping box that read it sat at 0. `Ping` sends the same ping F3's network chart uses (`ServerboundPingRequestPacket`, 1.20.2 and later) every two seconds while the box is on, and `PingMixin` times the answer (`handlePongResponse`). The packet's time field changed name in 1.20.5, so it's found by type. On 1.20 and 1.20.1, which have no in-game ping, the box falls back to the tab list.
