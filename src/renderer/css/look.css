@@ -356,3 +356,81 @@ body.no-anim .anim-pv * { animation: none !important; }
 .cz-rarity { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--rc, var(--muted)); }
 .cz-none .cz-rarity { color: var(--muted); }
 @media (max-width: 900px) { .cz-shell { grid-template-columns: 1fr; } .cz-left { position: static; } }
+/* Nimbus coins */
+.cz-filters[hidden], .cz-grid[hidden], .cz-earn[hidden] { display: none; }
+.cz-coins { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.cz-coins svg { width: 1.15em; height: 1.15em; flex: none; filter: drop-shadow(0 0 4px rgba(251, 191, 36, .35)); }
+.cz-coins b { color: #fcd34d; font-weight: 700; }
+.page-head .cz-balance { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.cz-balance-pill { display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 99px; font: inherit; font-size: 15px; cursor: pointer; color: inherit;
+  border: 1px solid rgba(251, 191, 36, .35); background: linear-gradient(135deg, rgba(251, 191, 36, .16), rgba(245, 158, 11, .06)); box-shadow: 0 0 24px -10px rgba(251, 191, 36, .7);
+  transition: transform .15s ease, box-shadow .15s ease; }
+.cz-balance-pill:hover { transform: translateY(-1px); box-shadow: 0 0 30px -8px rgba(251, 191, 36, .9); }
+.cz-streak { display: inline-flex; align-items: center; gap: 5px; padding: 7px 12px; border-radius: 99px; font-size: 13px; color: #fdba74; background: rgba(249, 115, 22, .12); border: 1px solid rgba(249, 115, 22, .3); }
+.cz-streak svg { width: 15px; height: 15px; }
+.cz-retry { margin-left: auto; flex: none; padding: 4px 10px; border-radius: 8px; font: inherit; font-size: 12px; cursor: pointer; color: inherit; background: rgba(255,255,255,.06); border: 1px solid var(--line, rgba(255,255,255,.12)); }
+.cz-retry:hover:not(:disabled) { background: rgba(255,255,255,.12); }
+.cz-card.locked .cz-thumb { filter: saturate(.55) brightness(.8); }
+.cz-card.locked:hover .cz-thumb { filter: none; }
+.cz-lock { position: absolute; top: 7px; right: 7px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: rgba(10, 10, 20, .7); color: #e5e7eb; border: 1px solid rgba(255,255,255,.14); }
+.cz-lock svg { width: 12px; height: 12px; }
+.cz-meta-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 12px; }
+.cz-free { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: #4ade80; }
+.cz-earn-tab svg { width: 15px; height: 15px; color: #fcd34d; }
+.cz-earn-tab.on svg { color: #fff; }
+.cz-daily { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: var(--card, rgba(20, 22, 34, .7)); border: 1px solid var(--line, rgba(255,255,255,.08)); }
+.cz-daily-head { display: flex; align-items: center; gap: 7px; font-size: 13.5px; }
+.cz-daily-head svg { width: 16px; height: 16px; color: #fcd34d; }
+.cz-daily-head span { margin-left: auto; font-size: 11.5px; color: var(--muted); }
+.cz-daily-empty { margin: 0; font-size: 12.5px; color: var(--muted); }
+.cz-daily-foot { font-size: 12px; color: var(--muted); display: flex; align-items: center; }
+.cz-daily-foot span { display: inline-flex; align-items: center; gap: 4px; }
+.cz-daily-foot svg { width: 14px; height: 14px; color: #4ade80; }
+.cz-task { display: flex; gap: 9px; align-items: flex-start; }
+.cz-task-ic { flex: none; width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; background: rgba(124, 92, 255, .16); color: #c4b5fd; margin-top: 1px; }
+.cz-task-ic svg { width: 14px; height: 14px; }
+.cz-task.done .cz-task-ic { background: rgba(74, 222, 128, .16); color: #4ade80; }
+.cz-task-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.cz-task-top { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.cz-task-top b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cz-task-reward { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 2px; font-size: 12px; color: #fcd34d; }
+.cz-task.done .cz-task-top b { color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(255,255,255,.25); }
+.cz-bar { height: 6px; border-radius: 99px; background: rgba(255,255,255,.07); overflow: hidden; }
+.cz-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--a1, #7c5cff), #fbbf24); transition: width .6s cubic-bezier(.2,.8,.2,1); }
+.cz-task.done .cz-bar i, .cz-ach.done .cz-bar i { background: linear-gradient(90deg, #22c55e, #4ade80); }
+.cz-task-num { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cz-task.big { padding: 12px; border-radius: 12px; background: rgba(255,255,255,.03); border: 1px solid var(--line, rgba(255,255,255,.08)); }
+.cz-task.big .cz-task-top { font-size: 14px; }
+.cz-task.big .cz-task-ic { width: 30px; height: 30px; }
+.cz-task.big .cz-bar { height: 8px; }
+.cz-earn { display: flex; flex-direction: column; gap: 16px; }
+.cz-earn-sec { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 16px; background: var(--card, rgba(20, 22, 34, .7)); border: 1px solid var(--line, rgba(255,255,255,.08)); }
+.cz-earn-sec header { display: flex; align-items: center; gap: 10px; }
+.cz-earn-sec h3 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+.cz-earn-sec h3 svg { width: 18px; height: 18px; color: #fcd34d; }
+.cz-earn-sec header .muted { margin-left: auto; font-size: 12.5px; }
+.cz-earn-sec > p.muted { margin: -4px 0 0; font-size: 12.5px; }
+.cz-earn-tasks { display: grid; gap: 8px; }
+.cz-earn-extra { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+.cz-earn-extra > div { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: 10px; background: rgba(255,255,255,.03); font-size: 12.5px; color: var(--muted); }
+.cz-earn-extra > div > svg { width: 16px; height: 16px; flex: none; color: #fdba74; }
+.cz-earn-extra b { margin-left: auto; color: var(--text, #fff); white-space: nowrap; display: inline-flex; align-items: center; gap: 2px; }
+.cz-ach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.cz-ach { display: flex; flex-direction: column; gap: 5px; padding: 11px 12px; border-radius: 12px; background: rgba(255,255,255,.03); border: 1px solid var(--line, rgba(255,255,255,.07)); }
+.cz-ach.done { border-color: rgba(251, 191, 36, .35); background: linear-gradient(135deg, rgba(251, 191, 36, .1), transparent 70%); }
+.cz-ach-top { display: flex; align-items: center; gap: 7px; font-size: 13px; }
+.cz-ach-ic { flex: none; width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; background: rgba(255,255,255,.06); color: var(--muted); }
+.cz-ach-ic svg { width: 13px; height: 13px; }
+.cz-ach.done .cz-ach-ic { background: rgba(251, 191, 36, .2); color: #fcd34d; }
+.cz-ach-desc { font-size: 12px; color: var(--muted); }
+.cz-earn-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 40px 20px; border-radius: 16px; background: var(--card, rgba(20, 22, 34, .7)); }
+.cz-earn-empty > svg { width: 46px; height: 46px; }
+.cz-earn-empty p { margin: 0; max-width: 440px; }
+.cz-buy { display: flex; gap: 16px; align-items: stretch; }
+.cz-buy-art { flex: none; width: 150px; aspect-ratio: 1; border-radius: 14px; display: grid; place-items: center; background: radial-gradient(60% 60% at 50% 45%, color-mix(in srgb, var(--rc) 35%, transparent), transparent 75%), rgba(255,255,255,.03); border: 1px solid color-mix(in srgb, var(--rc) 40%, transparent); }
+.cz-buy-thumb { width: 100%; height: 100%; object-fit: contain; }
+.cz-buy-info { flex: 1; display: flex; flex-direction: column; gap: 7px; }
+.cz-buy-info p { margin: 0; font-size: 13px; color: var(--muted); }
+.cz-buy-row { display: flex; justify-content: space-between; align-items: center; font-size: 13.5px; padding: 6px 10px; border-radius: 9px; background: rgba(255,255,255,.04); }
+.cz-buy-note { font-size: 12.5px !important; color: #fbbf24 !important; }
+.btn svg + * { margin-left: 0; }

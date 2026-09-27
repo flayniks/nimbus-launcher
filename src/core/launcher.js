@@ -307,6 +307,8 @@ class Launcher extends EventEmitter {
       if (this.bridgeUrl) extraJvm.push(`-Dnimbus.bridge=${this.bridgeUrl}`, `-Dnimbus.mc=${inst.mcVersion}`, `-Dnimbus.loader=${inst.loader}`);
       // cosmetics: yours from this file, everyone else's from the friends service
       extraJvm.push(`-Dnimbus.cosmetics=${this.paths.cosmetics}`);
+      // Nimbus coins: the game counts what you do into one file and reads today's tasks from another
+      extraJvm.push(`-Dnimbus.progress=${this.paths.progress}`, `-Dnimbus.tasks=${this.paths.tasks}`);
       if (this.apiBase) extraJvm.push(`-Dnimbus.api=${this.apiBase}`);
       // tests: extra JVM flags (e.g. authlib pointed at a stand-in Mojang)
       if (process.env.NIMBUS_EXTRA_JVM) extraJvm.push(...process.env.NIMBUS_EXTRA_JVM.split(' ').filter(Boolean));

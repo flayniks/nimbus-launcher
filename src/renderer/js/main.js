@@ -309,6 +309,15 @@ async function boot() {
     if (m.type === 'friend-request') toast('info', `${m.name} wants to be friends`, 'Open Friends to accept.', { actions: [{ label: 'Open', run: () => go('friends') }] });
     if (m.type === 'friend-added') toast('ok', `You and ${m.name} are friends now`, null);
   });
+  // Nimbus coins paid out: tasks, achievements, the daily log-in
+  api.on('cosmetics:coins', (events) => {
+    const total = events.reduce((a, e) => a + (e.coins || 0), 0);
+    if (!total) return;
+    const names = events.map((e) => e.title).filter(Boolean);
+    const achievement = events.find((e) => e.type === 'achievement');
+    toast('ok', `+${total.toLocaleString('en-US')} Nimbus coins`, achievement ? `Achievement: ${achievement.title}${names.length > 1 ? ` · ${names.filter((n) => n !== achievement.title).join(' · ')}` : ''}` : names.join(' · '),
+      { timeout: 7000, actions: [{ label: 'Spend them', run: () => go('cosmetics') }] });
+  });
   // a finished game or download may be all a ready update was waiting for
   store.on('game-state', () => setTimeout(maybeRestartForUpdate, 1500));
   store.on('tasks', () => { if (!busyWith()) maybeRestartForUpdate(); });

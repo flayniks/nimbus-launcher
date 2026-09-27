@@ -708,37 +708,160 @@ test('friends service: cosmetics are saved by their owner and anyone can look th
   // only you can set yours, and only real ids go in
   assert.equal((await call('cosmetics/set', { hat: 'crown_royal' })).http, 401);
   assert.equal((await call('cosmetics/set', { hat: 'Crown Royal!' }, alex.token)).http, 400);
-  const set = await call('cosmetics/set', { hat: 'crown_royal', pet: 'dragon_ember', wings: null, aura: 'aura_runes' }, alex.token);
-  assert.deepEqual(set.worn, { hat: 'crown_royal', pet: 'dragon_ember', wings: null, aura: 'aura_runes' });
+  // what isn't unlocked yet (or free) isn't shown to others
+  const set = await call('cosmetics/set', { hat: 'tophat_classic', pet: 'dragon_ember', wings: null, aura: 'aura_runes' }, alex.token);
+  assert.deepEqual(set.worn, { hat: 'tophat_classic', pet: null, wings: null, aura: null });
+  assert.deepEqual(set.locked, ['dragon_ember', 'aura_runes']);
+  await store.set('wallet/11111111111111111111111111111111', { coins: 0, owned: ['dragon_ember', 'aura_runes'] });
+  assert.deepEqual((await call('cosmetics/set', { hat: 'tophat_classic', pet: 'dragon_ember', wings: null, aura: 'aura_runes' }, alex.token)).worn, { hat: 'tophat_classic', pet: 'dragon_ember', wings: null, aura: 'aura_runes' });
   // anyone can look, by uuid (dashes or not) or by name on offline-mode servers
   const got = await call('cosmetics/get', { players: [{ uuid: '11111111-1111-1111-1111-111111111111' }, { uuid: '99999999999999999999999999999999', name: 'alex' }, { uuid: '22222222222222222222222222222222', name: 'Nobody' }] });
   assert.equal(got.http, 200);
-  assert.equal(got.cosmetics['11111111-1111-1111-1111-111111111111'].hat, 'crown_royal');
+  assert.equal(got.cosmetics['11111111-1111-1111-1111-111111111111'].hat, 'tophat_classic');
   assert.equal(got.cosmetics['99999999999999999999999999999999'].pet, 'dragon_ember');
   assert.equal(got.cosmetics['22222222222222222222222222222222'], undefined);
 });
 
-test('cosmetics: what you wear is saved, written for the game and shared', async () => {
-  const { Cosmetics } = require('../src/core/cosmetics');
+test('friends service: Nimbus coins from daily tasks, log-ins, playing and achievements', async () => {
+  const { createApi, memoryStore } = await import('../website/lib/friends-api.mjs');
+  const { tasksFor, REWARDS, STATS } = await import('../website/lib/coins.mjs');
+  const store = memoryStore();
+  let clock = Date.UTC(2026, 8, 27, 10);
+  const api = createApi({ store, devAuth: true, now: () => clock });
+  const call = async (p, body, token) => {
+    const res = await api(new Request(`http://x/api/${p}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) }));
+    return { http: res.status, ...(await res.json()) };
+  };
+  const uuid = '33333333333333333333333333333333';
+  const me = await call('login/finish', { dev: true, uuid, name: 'Coiny' });
+  assert.equal((await call('coins/state', {})).http, 401);
+
+  // first visit: the welcome gift and the daily log-in
+  let st = await call('coins/state', {}, me.token);
+  assert.equal(st.http, 200);
+  assert.deepEqual(st.events.map((e) => e.type), ['welcome', 'login']);
+  assert.equal(st.coins, REWARDS.welcome + REWARDS.login);
+  assert.equal(st.tasks.length, 3);
+  assert.equal(new Set(st.tasks.map((t) => t.stat)).size, 3, 'three different things to do');
+  assert.deepEqual(st.tasks.map((t) => t.reward), REWARDS.tiers);
+  assert.deepEqual(st.tasks.map((t) => t.id), tasksFor('2026-09-27', uuid).map((t) => t.id));
+  assert.equal(st.resetsAt, Date.UTC(2026, 8, 28));
+  // asking again pays nothing twice
+  st = await call('coins/state', {}, me.token);
+  assert.deepEqual(st.events, []);
+  const start = st.coins;
+
+  // the game reports today's totals: finishing the first task pays it, plus playing time
+  const [easy, medium, hard] = st.tasks;
+  const stats = { [easy.stat]: easy.goal, play: Math.max(easy.stat === 'play' ? easy.goal : 0, 30 * 60) };
+  st = await call('coins/progress', { day: '2026-09-27', stats }, me.token);
+  const types = st.events.map((e) => e.type);
+  assert.ok(types.includes('task'));
+  assert.ok(types.includes('play'));
+  assert.equal(st.tasks[0].done, true);
+  assert.equal(st.tasks[1].done, false);
+  const paidPlay = st.events.find((e) => e.type === 'play').coins;
+  assert.equal(paidPlay, Math.floor(stats.play / REWARDS.playEvery));
+  assert.equal(st.coins, start + easy.reward + paidPlay + st.events.filter((e) => e.type === 'achievement').reduce((a, e) => a + e.coins, 0));
+  // the same totals again pay nothing; lower ones don't take anything away
+  assert.deepEqual((await call('coins/progress', { day: '2026-09-27', stats }, me.token)).events, []);
+  assert.deepEqual((await call('coins/progress', { day: '2026-09-27', stats: { [easy.stat]: 1 } }, me.token)).events, []);
+  // a report for another day counts for nothing, and silly numbers are capped
+  assert.deepEqual((await call('coins/progress', { day: '2026-09-20', stats: { [medium.stat]: medium.goal } }, me.token)).events, []);
+  st = await call('coins/progress', { day: '2026-09-27', stats: { [medium.stat]: medium.goal, [hard.stat]: hard.goal, mine: 1e12 } }, me.token);
+  assert.ok(st.events.some((e) => e.type === 'bonus'), 'all three done pays the bonus');
+  const w = await store.get(`wallet/${uuid}`);
+  assert.ok(w.stats.mine <= STATS.mine);
+  assert.ok(st.achievements.find((a) => a.id === 'mine_1k').done);
+
+  // buying: only with enough coins, only once, only real ones
+  assert.equal((await call('coins/buy', { id: 'nope_nope' }, me.token)).http, 400);
+  assert.equal((await call('coins/buy', { id: 'tophat_classic' }, me.token)).http, 400, 'free ones are already yours');
+  const before = st.coins;
+  const bought = await call('coins/buy', { id: 'halo_angel' }, me.token);
+  assert.equal(bought.http, 200);
+  assert.equal(bought.coins, before - 150);
+  assert.ok(bought.owned.includes('halo_angel'));
+  assert.equal((await call('coins/buy', { id: 'halo_angel' }, me.token)).http, 400);
+  await store.set(`wallet/${uuid}`, { ...(await store.get(`wallet/${uuid}`)), coins: 10 });
+  const poor = await call('coins/buy', { id: 'crown_void' }, me.token);
+  assert.equal(poor.http, 400);
+  assert.match(poor.error, /more coins/);
+
+  // the next day: new tasks, and the streak goes up
+  clock += 86_400_000;
+  st = await call('coins/state', {}, me.token);
+  assert.equal(st.streak, 2);
+  assert.equal(st.events[0].type, 'login');
+  assert.equal(st.events[0].coins, REWARDS.login + REWARDS.streakStep);
+  assert.ok(st.tasks.every((t) => !t.done && t.progress === 0));
+  // missing a day starts it over
+  clock += 3 * 86_400_000;
+  assert.equal((await call('coins/state', {}, me.token)).streak, 1);
+});
+
+test('cosmetics: what you wear is saved, written for the game and shared; locked ones need coins', async () => {
+  const { Cosmetics, describe } = require('../src/core/cosmetics');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nimbus-cos-'));
-  const uploads = [];
-  const launcher = { paths: { root: dir, cosmetics: path.join(dir, 'nimbus-cosmetics.json') }, settings: {} };
-  const friends = { call: async (p, body) => { uploads.push([p, body]); return { ok: true }; } };
+  const calls = [];
+  const launcher = {
+    paths: { root: dir, cosmetics: path.join(dir, 'nimbus-cosmetics.json'), progress: path.join(dir, 'nimbus-progress.json'), tasks: path.join(dir, 'nimbus-tasks.json') },
+    settings: {},
+    accounts: { activeSession: async () => ({ uuid: '44444444-4444-4444-4444-444444444444' }) },
+  };
+  let wallet = { coins: 400, owned: [], day: '2026-09-27', tasks: [{ id: '0-mine-64', title: 'Mine 64 blocks', stat: 'mine', goal: 64, reward: 30, done: false }] };
+  const friends = {
+    call: async (p, body) => {
+      calls.push([p, body]);
+      if (p === 'coins/state') return { ...wallet, events: [] };
+      if (p === 'coins/buy') { wallet = { ...wallet, coins: wallet.coins - 150, owned: [...wallet.owned, body.id] }; return { ...wallet, events: [], bought: body.id }; }
+      if (p === 'coins/progress') return { ...wallet, events: [{ type: 'task', title: 'Mine 64 blocks', coins: 30 }] };
+      return { ok: true, locked: [] };
+    },
+  };
   const c = await new Cosmetics({ launcher, friends }).init();
-  await c.set('hat', 'halo_angel');
-  await c.set('pet', 'ghost');
+  await c.refresh();
+  assert.equal(c.state().wallet.coins, 400);
+  // free ones go straight on; locked ones don't
+  await c.set('pet', 'bee');
+  await assert.rejects(() => c.set('hat', 'halo_angel'), /Unlock it first/);
   await assert.rejects(() => c.set('hat', 'Not A Real Id'));
-  await assert.rejects(() => c.set('cape', 'halo_angel'));
+  await assert.rejects(() => c.set('cape', 'bee'));
+  await assert.rejects(() => c.set('hat', 'bee'), /Unknown/);
+  // buying puts it on
+  const coins = [];
+  c.on('coins', (e) => coins.push(...e));
+  await c.buy('halo_angel');
+  assert.equal(c.state().worn.hat, 'halo_angel');
+  assert.equal(c.state().wallet.coins, 250);
   const game = JSON.parse(fs.readFileSync(launcher.paths.cosmetics, 'utf8'));
   assert.equal(game.hat, 'halo_angel');
-  assert.equal(game.pet, 'ghost');
-  await c.set('hat', null);
-  assert.equal(JSON.parse(fs.readFileSync(launcher.paths.cosmetics, 'utf8')).hat, null);
+  assert.equal(game.pet, 'bee');
+  // today's tasks are written for the game
+  assert.equal(JSON.parse(fs.readFileSync(launcher.paths.tasks, 'utf8')).tasks[0].stat, 'mine');
   await new Promise((r) => setTimeout(r, 20));
-  assert.deepEqual(uploads.at(-1), ['cosmetics/set', { hat: null, pet: 'ghost', wings: null, aura: null }]);
+  assert.deepEqual(calls.filter(([p]) => p === 'cosmetics/set').at(-1)[1], { hat: 'halo_angel', pet: 'bee', wings: null, aura: null });
   assert.equal(c.state().sync.state, 'shared');
-  // it comes back after a restart
-  const again = await new Cosmetics({ launcher, friends }).init();
-  assert.equal(again.state().worn.pet, 'ghost');
+  // what the game counted goes to the service once, and what it pays is passed on
+  fs.writeFileSync(launcher.paths.progress, JSON.stringify({ day: '2026-09-27', stats: { mine: 70 } }));
+  await c.report();
+  await c.report();
+  assert.equal(calls.filter(([p]) => p === 'coins/progress').length, 1);
+  assert.equal(coins[0].coins, 30);
+  // it all comes back after a restart, even with the service gone
+  const offline = { call: async () => { throw new Error('The friends service answered 404.'); } };
+  const again = await new Cosmetics({ launcher, friends: offline }).init();
+  assert.equal(again.state().worn.hat, 'halo_angel');
+  assert.ok(again.owns('halo_angel'));
+  await again.refresh();
+  assert.equal(again.state().sync.state, 'offline');
+  assert.match(again.state().sync.error, /answered 404/);
+  again.stop();
+  // a wallet that doesn't have it any more takes it off
+  wallet = { ...wallet, owned: [] };
+  await c.refresh();
+  assert.equal(c.state().worn.hat, null);
+  assert.equal(describe(new Error('Sign in with a Microsoft account to use friends.')).state, 'signed-out');
+  c.stop();
   fs.rmSync(dir, { recursive: true, force: true });
 });

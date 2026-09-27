@@ -196,6 +196,32 @@ public final class NimbusHud {
 			if (out.isEmpty()) out.add(new Line().add("No armor", label()));
 			return out;
 		}));
+		MODULES.add(new TextModule("tasks", "Daily tasks", "Today's Nimbus coins tasks and how far along you are", true) {
+			@Override
+			boolean enabled() {
+				return super.enabled() && !Progress.today().isEmpty();
+			}
+
+			@Override
+			List<Line> lines() {
+				List<Line> out = new ArrayList<>();
+				out.add(new Line().add("Daily tasks", label()));
+				for (Object[] t : Progress.today()) {
+					String title = (String) t[0];
+					double have = (double) t[1];
+					double goal = (double) t[2];
+					boolean done = (boolean) t[4];
+					boolean time = java.util.Set.of("play", "together", "nether", "end").contains((String) t[5]);
+					if (done) {
+						out.add(new Line().add("\u2714 ", 0xFF4ADE80).add(title, 0xFF86EFAC));
+					} else {
+						String amount = time ? (int) (have / 60) + "/" + (int) (goal / 60) + " min" : (long) have + "/" + (long) goal;
+						out.add(new Line().add(title + " ", value()).add(amount, 0xFFFCD34D));
+					}
+				}
+				return out;
+			}
+		});
 		MODULES.add(text("server", "Server", "The server you are playing on", false, () -> {
 			String s = "Singleplayer";
 			try {
@@ -421,6 +447,11 @@ public final class NimbusHud {
 				CrazyFx.hud(c);
 			} catch (Throwable ignored) {
 				// the effects are extra
+			}
+			try {
+				if (!Compat.hudHidden()) Progress.draw(c);
+			} catch (Throwable ignored) {
+				// the task cards are extra
 			}
 		} finally {
 			try {

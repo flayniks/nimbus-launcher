@@ -343,6 +343,8 @@ function registerIpc() {
   handle('settings:get', () => launcher.getSettings());
   handle('cosmetics:state', () => cosmetics.state());
   handle('cosmetics:set', (slot, id) => cosmetics.set(slot, id));
+  handle('cosmetics:buy', (id) => cosmetics.buy(id));
+  handle('cosmetics:refresh', async () => { await cosmetics.refresh(); return cosmetics.state(); });
   handle('settings:set', async (patch) => {
     const out = await launcher.setSettings(patch);
     if ('showOtherCosmetics' in patch) await syncCosmeticsSetting();
@@ -648,13 +650,16 @@ app.whenReady().then(async () => {
   await lan.startBridge().catch(() => {});
   cosmetics = new Cosmetics({ launcher, friends });
   cosmetics.on('state', (st) => send('cosmetics:state', st));
+  cosmetics.on('coins', (events) => send('cosmetics:coins', events));
   await cosmetics.init().catch(() => {});
-  // share what you wear as soon as the friends sign-in works
-  let signedIn = false;
+  // the wallet and what you wear follow the friends sign-in: fetched again whenever it (re)connects
+  let signedAs = null;
   friends.on('state', (st) => {
-    if (st.signedIn && !signedIn) cosmetics.upload().catch(() => {});
-    signedIn = Boolean(st.signedIn);
+    const now = st.signedIn && !st.offline ? st.me?.uuid || 'yes' : null;
+    if (now && now !== signedAs) cosmetics.refresh().catch(() => {});
+    signedAs = now;
   });
+  launcher.on('game-state', () => cosmetics.gameState(launcher.running.size > 0));
   friends.apiBase().then((b) => { launcher.apiBase = b; }).catch(() => {});
   await syncCosmeticsSetting();
   discord = new DiscordStatus({

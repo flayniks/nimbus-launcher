@@ -10,7 +10,9 @@ The website (`public/`) and the friends service behind Friends, chat and Nimbus 
 4. In **Site configuration → Change site name**, name it **nimbus-launcher** so it lives at `https://nimbus-launcher.netlify.app`.
    If that name is taken, pick another and put the new address in `services.json` at the repo root (`"friends": "https://<your-name>.netlify.app/api"`). Launchers read that file, so no new launcher release is needed.
 
-Every push to `main` redeploys the site after that. Check the service at `https://<site>/api/health`, which should say `{"ok":true}`.
+After that the site redeploys whenever a push to `main` changes `website/` (launcher-only pushes are skipped, see `ignore` in `netlify.toml`, so they don't use up the free plan's monthly build credits). Check the service at `https://<site>/api/health`, which should say `{"ok":true}`.
+
+If that address says **Not Found** (Netlify's "site not found" page) the site was deleted or renamed; if it says **Site not available**, Netlify paused it for going over the free plan's credits. Friends, chat, Nimbus LAN, shared cosmetics and Nimbus coins all need it, and the launcher then says it can't reach the Nimbus online service. Import it again (steps above), or point `services.json` at its new address.
 
 ## The site
 
@@ -25,7 +27,8 @@ To preview it, run any static server in `public/`, for example `python3 -m http.
 - **Sign-in** uses Mojang's own server check. The service hands out a random server id, the launcher "joins" it with the player's session, and the service asks Mojang (`hasJoined`) to confirm. The service never sees a password or token. It stores a random session token.
 - **Presence:** each launcher calls `POST /api/beat` about every 15 seconds (every 2.5 seconds while chatting or joining). The reply carries friends, requests and new messages.
 - **Chat** keeps the last 200 messages per pair.
-- **Cosmetics:** `cosmetics/set` saves what a signed-in player wears; `cosmetics/get` (no sign-in) answers for a batch of players by uuid, or by name for offline-mode servers.
+- **Cosmetics:** `cosmetics/set` saves what a signed-in player wears (only what they've unlocked; commons are free); `cosmetics/get` (no sign-in) answers for a batch of players by uuid, or by name for offline-mode servers.
+- **Nimbus coins** (`lib/coins.mjs`): `coins/state` answers with the wallet (and pays the daily log-in), `coins/progress` takes the day's totals counted by Nimbus Core and pays out daily tasks, achievements and playing time, `coins/buy` unlocks a cosmetic. Prices come from `lib/cosmetic-prices.mjs`, which `tools/cosmetics/build.mjs` writes.
 - **Relay** passes Nimbus LAN join requests, answers and the WebRTC handshake, between friends only. Game traffic never goes through the service; it flows directly between the two players' computers.
 
 `test/friends-server.mjs` runs the same code locally with an in-memory store, for tests.

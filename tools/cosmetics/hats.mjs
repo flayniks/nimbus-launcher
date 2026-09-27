@@ -418,4 +418,136 @@ floater('cloud_storm', 'Storm Cloud', 'epic', 'Dark, grumbly, and it throws ligh
     [fx('leaf', { at: [0, 1, 0], rate: 3, v: [0, -3, 0], sp: 6, life: 2.2, c: [0xff9ec7, 0xffc2de], glow: false })]);
 }
 
+// ------------------------------------------------------------------ 1.7.0: more hats
+
+{ // knitted beanie with a pom
+  const v = new Vox();
+  for (let j = 0; j < 5; j++) v.cyl(-0.5, -2 + j, -0.5, 1, 5.3 - j * 0.35, 5.3 - j * 0.35, (x, y, z) => (y === -2 ? 0x1f5f8b : (x + z + y) % 2 ? 0x2a7fb0 : 0x3b95c9));
+  const pom = new Vox().sphere(0, 0, 0, 1.9, (x, y, z) => ((x + y + z) % 2 ? 0xffffff : 0xe8f0ff));
+  hat('hat_beanie', 'Cosy Beanie', 'common', 'Warm, knitted, with a bouncy pom.', [part({ vox: v }), part({ p: [0, 3.6, 0], a: [pulse(0.08, 1.2)], vox: pom })]);
+}
+{ // graduation cap with a swinging tassel
+  const v = new Vox();
+  band(v, -1, 2, 0x1d1d24, 0, 0);
+  v.box(-7, 1, -7, 14, 1, 14, 0x24242e).box(-1, 2, -1, 2, 1, 2, 0xffd24a);
+  const tassel = new Vox().line([0, 0, 0], [0, -4, 0], 0xffd24a).box(-1, -6, -1, 2, 2, 2, 0xffd24a);
+  hat('hat_grad', 'Graduation Cap', 'common', 'Top of the class. The tassel never stops swinging.', [part({ vox: v }), part({ p: [0, 2.5, 0], vox: new Vox().line([0, 0, 0], [6, 0, 0], 0xffd24a), c: [part({ p: [6, 0, 0], a: [sway('x', 14, 0.9), sway('z', 8, 0.6)], vox: tassel })] })]);
+}
+{ // a big red mushroom cap
+  const v = new Vox();
+  v.sphere(-0.5, 1, -0.5, 7, (x, y, z, dx, dy) => {
+    if (dy < -0.2) return 0xf1e3c8;
+    const spot = (Math.abs(((x * 7 + z * 13 + y * 5) % 11)) < 2) && dy > 0.1;
+    return spot ? 0xffffff : 0xd62834;
+  }, 0, 4.2, 7);
+  for (const [x, z] of [[-3, -3], [2, -3], [-3, 2], [2, 2]]) v.box(x, -1, z, 1, 1, 1, 0xf1e3c8);
+  hat('hat_mushroom', 'Mushroom Cap', 'common', 'Totally not poisonous. Probably.', [part({ p: [0, 0, 0], vox: v })],
+    [fx('pollen', { at: [0, 6, 0], rate: 3, v: [0, 2, 0], sp: 3, life: 2, c: [0xfff1c8, 0xffffff], glow: false })]);
+}
+{ // a sprout growing out of your head
+  const stem = new Vox().line([0, 0, 0], [0, 5, 0], 0x4fb80f);
+  const leaf = (s) => new Vox().box(s > 0 ? 0 : -3, 0, 0, 3, 1, 2, 0x5fd35f).set(s > 0 ? 3 : -4, 1, 0, 0x5fd35f);
+  hat('hat_sprout', 'Little Sprout', 'common', 'Water daily. It sways in the breeze.', [part({ a: [sway('z', 8, 0.5), sway('x', 5, 0.37)], vox: stem, c: [
+    part({ p: [0, 5, 0], a: [sway('z', 18, 0.8)], vox: leaf(1) }),
+    part({ p: [0, 4, 0], a: [sway('z', -18, 0.8, 0.3)], vox: leaf(-1) }),
+  ] })], [fx('drop', { at: [0, 7, 0], rate: 1, v: [0, -4, 0], sp: 1, life: 0.8, g: -20, c: [0x6fb6ff], glow: false })]);
+}
+{ // miner's helmet with a lamp that lights your way
+  const v = new Vox();
+  v.sphere(-0.5, -1, -0.5, 5.6, (x, y, z, dx, dy) => (dy < -0.55 ? 0xc79a1a : 0xffc21a), 0, 4.6, 5.6);
+  band(v, -2, 1, 0x8a6a10, 0, 1);
+  v.box(-1, 0, 4, 2, 3, 2, 0x5a4a3a).box(-1, 1, 6, 2, 2, 1, 0xfff6c8, GLOW);
+  hat('hat_miner', 'Miner Helmet', 'rare', 'For diamond hunters. The lamp really glows.', [part({ vox: v }), part({ p: [0, 2, 8], a: [pulse(0.15, 1.5)], vox: new Vox().box(-1, -1, 0, 2, 2, 1, alpha(0xfff6c8, 0.35), GLOW | SEE) })],
+    [fx('spark', { at: [0, 2, 8], rate: 4, v: [0, 0, 14], sp: 3, life: 0.5, c: [0xfff6c8] })]);
+}
+floater('diamond_float', 'Floating Diamond', 'rare', 'A diamond that spins over your head. Show off your finds.', (() => {
+  const v = new Vox();
+  for (let y = -4; y <= 4; y++) {
+    const r = y >= 1 ? 4 - y + 1.2 : 4 + y * 0.9 + 0.2;
+    for (let x = -4; x <= 4; x++) for (let z = -4; z <= 4; z++) if (Math.abs(x) + Math.abs(z) <= r) v.set(x, y, z, mix(0x2fd6d0, 0xb8fff9, (y + 4) / 8), GLOW);
+  }
+  return v;
+})(), [bob(1, 0.5), spin('y', 60)], [fx('spark', { at: [0, 0, 0], rate: 6, v: [0, 2, 0], sp: 6, life: 0.9, c: [0xb8fff9, 0xffffff] })], 11);
+{ // astronaut: a glass bubble with an antenna
+  const v = new Vox();
+  v.sphere(-0.5, -4, -0.5, 7.2, alpha(0xcfe8ff, 0.3), SEE, 7.2, 7.2);
+  for (const c of [...v.cells.values()]) if (c.y < -9 || Math.hypot(c.x + 0.5, c.y + 4.5, c.z + 0.5) < 6.2) v.cells.delete(`${c.x},${c.y},${c.z}`);
+  band(v, -10, 2, 0xe8ecf4, 0, 3);
+  const ant = new Vox().line([0, 0, 0], [0, 4, 0], 0x9aa3b5).set(0, 5, 0, 0xff3b5c, GLOW | FLICKER);
+  hat('hat_astronaut', 'Astronaut Helmet', 'epic', 'One small step. Its antenna blinks red.', [part({ vox: v }), part({ p: [4, 2, -1], a: [sway('z', 6, 1.1)], vox: ant })],
+    [fx('star', { at: [0, 2, 0], rate: 3, v: [0, 2, 0], sp: 9, life: 1.5, c: [0xffffff, 0x9fd4ff] })]);
+}
+{ // jester's hat: three floppy tips with bells
+  const base = new Vox();
+  band(base, -1, 2, (x, y, z) => ((x + z) % 2 ? 0x7c3aed : 0xffc21a), 0, 1);
+  base.cyl(-0.5, 1, -0.5, 2, 4.8, 3.5, (x, y, z) => ((x + z) % 2 ? 0x7c3aed : 0xd62834));
+  const tip = (c) => {
+    const t = new Vox();
+    for (let i = 0; i < 7; i++) t.sphere(i * 0.9, i * 0.6 - (i * i) / 14, 0, Math.max(0.7, 1.8 - i * 0.18), c);
+    return t;
+  };
+  const bell = new Vox().sphere(0, 0, 0, 1.1, 0xffe27a, GLOW);
+  const parts = [part({ vox: base })];
+  [[0, 0xd62834], [120, 0x7c3aed], [240, 0x22a05a]].forEach(([yaw, c], k) => parts.push(part({ p: [0, 3, 0], r: [0, yaw, 25], a: [sway('z', 12, 0.9, k / 3)], vox: tip(c), c: [part({ p: [6.3, 1, 0], a: [sway('z', 25, 1.8, k / 3)], vox: bell })] })));
+  hat('hat_jester', 'Jester Hat', 'epic', 'Jingle jingle. Three floppy tips, three golden bells.', parts,
+    [fx('note', { at: [0, 8, 0], rate: 1.2, v: [0, 5, 0], sp: 5, life: 1.4, c: [0xffe27a, 0xff6fd8] })]);
+}
+{ // ender eyes circling your head
+  const eye = new Vox().sphere(0, 0, 0, 2.2, (x, y, z, dx, dy, dz) => (Math.abs(dx) < 0.45 && Math.abs(dy) < 0.7 && dz > 0.3 ? 0x0a3a2a : mix(0x1fae7a, 0x9bffd8, (dy + 1) / 2)), GLOW);
+  const parts = [];
+  for (let k = 0; k < 6; k++) parts.push(part({ p: [0, 4, 0], a: [orbit(7, 70, k * 60), bob(1.2, 0.6, k / 6), spin('y', 150)], vox: eye }));
+  hat('halo_ender', 'Ender Eye Halo', 'legendary', 'Six eyes of ender that never stop watching.', parts,
+    [fx('spark', { at: [0, 4, 0], rate: 9, v: [0, -1, 0], sp: 8, life: 1, c: [0x1fae7a, 0xb57bff, 0x0a3a2a] })]);
+}
+{ // a crown dripping with lava
+  const v = new Vox();
+  band(v, -1, 3, (x, y) => (y === 1 ? 0x2a2c36 : 0x14151c), 0, 1);
+  for (let i = -5; i <= 4; i++) {
+    for (const [x, z] of [[i, -5], [i, 4], [-5, i], [4, i]]) {
+      const h = 1 + ((i * 7 + x * 3 + z * 5) & 3);
+      for (let y = 2; y < 2 + h; y++) v.set(x, y, z, y === 1 + h ? 0xffd35c : 0x3a3d4f, y === 1 + h ? GLOW | FLICKER : 0);
+      if ((i + x + z) % 3 === 0) v.set(x, -2, z, 0xff7a1a, GLOW | FLICKER);
+    }
+  }
+  hat('crown_lava', 'Magma Crown', 'legendary', 'Forged in the Nether. It drips glowing lava.', [part({ vox: v })],
+    [fx('drop', { at: [0, -1, 0], rate: 8, v: [0, -4, 0], sp: 6, life: 0.8, g: -40, c: [0xff7a1a, 0xffb23f] }), fx('ember', { at: [0, 5, 0], rate: 8, v: [0, 8, 0], sp: 6, life: 1, c: [0xffb23f, 0xff5a1a] })]);
+}
+{ // a little UFO hovering over you with a tractor beam
+  const ufo = new Vox();
+  ufo.cyl(-0.5, 0, -0.5, 1, 6, 6, 0x9aa3b5).cyl(-0.5, 1, -0.5, 1, 4.6, 4.6, 0xd9dee8).sphere(-0.5, 2, -0.5, 2.8, alpha(0x9fe7ff, 0.6), SEE, 2.2, 2.8);
+  for (let k = 0; k < 8; k++) ufo.set(Math.round(Math.cos(k * 0.785) * 5.5 - 0.5), 0, Math.round(Math.sin(k * 0.785) * 5.5 - 0.5), [0xff3b5c, 0x9bff3a, 0xffe16f, 0x22d3ee][k % 4], GLOW | FLICKER);
+  const beam = new Vox().cyl(-0.5, 0, -0.5, 6, 4.4, 1.6, alpha(0x9bff3a, 0.22), GLOW | SEE, 0);
+  hat('hat_ufo', 'UFO Abduction', 'legendary', 'They came for your brain. The beam is just for show.', [part({ p: [0, 12, 0], a: [bob(1, 0.6), spin('y', 90)], vox: ufo }), part({ p: [0, 5, 0], a: [pulse(0.08, 2)], vox: beam })],
+    [fx('spark', { at: [0, 6, 0], rate: 10, v: [0, 6, 0], sp: 3, life: 0.9, c: [0x9bff3a, 0xe2ff9e] })]);
+}
+{ // a snow globe on your head
+  const v = new Vox();
+  v.cyl(-0.5, 0, -0.5, 2, 5, 4.5, 0x7a4a2c).cyl(-0.5, 0, -0.5, 1, 5.2, 5.2, 0xffd24a);
+  const glass = new Vox().sphere(-0.5, 5, -0.5, 5, alpha(0xe8fbff, 0.25), SEE);
+  for (const c of [...glass.cells.values()]) if (c.y < 2 || Math.hypot(c.x + 0.5, c.y - 4.5, c.z + 0.5) < 4) glass.cells.delete(`${c.x},${c.y},${c.z}`);
+  const tree = new Vox().cyl(-0.5, 2, -0.5, 5, 2.6, 0.3, 0x14924d).set(-1, 7, -1, 0xffe27a, GLOW).box(-1, 2, -1, 1, 1, 1, 0x7a4a2c);
+  hat('hat_snowglobe', 'Snow Globe', 'epic', 'A tiny winter inside a glass dome. It never stops snowing.', [part({ vox: v }), part({ vox: glass }), part({ a: [spin('y', 20)], vox: tree })],
+    [fx('snow', { at: [0, 8, 0], rate: 10, v: [0, -2, 0], sp: 3, life: 2.2, g: -2, c: [0xffffff], glow: false })]);
+}
+{ // the frog hat
+  const v = new Vox();
+  v.sphere(-0.5, -1, -0.5, 5.6, (x, y, z, dx, dy) => (dy < -0.5 ? 0x3f8f2a : 0x5fbf3a), 0, 4, 5.6);
+  for (const s of [-1, 1]) v.sphere(s * 3 - 0.5, 3.5, 2, 1.8, (x, y, z, dx, dy, dz) => (dz > 0.5 && dy > -0.3 ? 0x14141c : 0x6fcf4a), 0, 1.8, 1.8);
+  v.box(-3, 0, 5, 6, 1, 1, 0xd94a4a);
+  hat('hat_frog', 'Frog Hat', 'rare', 'Ribbit. It blinks at whoever is behind you.', [part({ a: [twitch('y', 10, 3)], vox: v })]);
+}
+{ // the galaxy crown: every colour, with planets going round
+  const v = new Vox();
+  band(v, -1, 2, (x, y, z) => hsl(((x + z + 10) / 20) % 1, 0.8, 0.6), GLOW | RAINBOW, 1);
+  for (let i = -5; i <= 4; i += 3) for (const [x, z] of [[i, -5], [i, 4], [-5, i], [4, i]]) for (let y = 1; y < 5; y++) v.set(x, y, z, hsl(y / 6, 0.8, 0.65), GLOW | RAINBOW);
+  const planet = (c, r) => new Vox().sphere(0, 0, 0, r, c, GLOW);
+  hat('crown_galaxy', 'Galaxy Crown', 'mythic', 'A crown with its own solar system. The planets never stop.', [
+    part({ vox: v }),
+    part({ p: [0, 4, 0], a: [orbit(9, 60, 0), bob(1, 0.5)], vox: planet(0xff6fd8, 1.6) }),
+    part({ p: [0, 5, 0], a: [orbit(11, -45, 120), bob(1, 0.4, 0.3)], vox: planet(0x22d3ee, 1.3) }),
+    part({ p: [0, 3, 0], a: [orbit(7, 90, 240), bob(0.8, 0.7, 0.6)], vox: planet(0xffe16f, 1.1) }),
+    part({ p: [0, 5, 0], r: [20, 0, 0], a: [spin('y', 40)], vox: new Vox().ring(0, 0, 0, 9, 0.8, alpha(0xc4a8ff, 0.6), GLOW | SEE) }),
+  ], [fx('star', { at: [0, 5, 0], rate: 12, v: [0, 3, 0], sp: 10, life: 1.4, c: [0xffffff, 0xff6fd8, 0x22d3ee, 0xffe16f] })]);
+}
+
 export default items;

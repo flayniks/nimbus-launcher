@@ -1,7 +1,7 @@
 {
   "name": "nimbus-launcher",
   "productName": "Nimbus Launcher",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "A fast Minecraft: Java Edition launcher with Modrinth mods, modpacks, shaders and resource packs, every loader, every version, and a one-click FPS boost.",
   "main": "main.js",
   "license": "MIT",

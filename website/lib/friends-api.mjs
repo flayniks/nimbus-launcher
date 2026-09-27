@@ -3,6 +3,7 @@
 // WebRTC handshake). Storage is a key/value store with list-by-prefix; on Netlify that is
 // Netlify Blobs, in tests a Map. Every write goes to its own key, so two launchers
 // writing at the same time never overwrite each other.
+import { newWallet, settle, buy, view, owns } from './coins.mjs';
 
 const ONLINE_MS = 90_000;
 const SESSION_MS = 30 * 24 * 3600_000;
@@ -29,7 +30,7 @@ const validUuid = (u) => /^[0-9a-f]{32}$/.test(u);
  * @param {string} [deps.sessionServer] Mojang's session server
  * @param {string} [deps.profileApi] Mojang's name → uuid API
  */
-export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sessionServer = 'https://sessionserver.mojang.com', profileApi = 'https://api.mojang.com' }) {
+export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sessionServer = 'https://sessionserver.mojang.com', profileApi = 'https://api.mojang.com', now = () => Date.now() }) {
   async function me(req) {
     const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
     if (!/^[0-9a-f]{64}$/.test(token)) return null;
@@ -56,6 +57,20 @@ export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sess
     if (!r.ok) throw new Error('Mojang did not answer. Try again in a moment.');
     const p = await r.json();
     return { uuid: cleanUuid(p.id), name: p.name };
+  }
+
+  async function wallet(uuid) {
+    return (await store.get(`wallet/${uuid}`)) || newWallet();
+  }
+
+  /** Loads the wallet, applies `change`, pays out whatever is due, saves, and answers with the lot. */
+  async function withWallet(who, change = () => null, report = null) {
+    const w = await wallet(who.uuid);
+    const extra = change(w) || {};
+    const t = now();
+    const events = settle(w, who.uuid, t, report);
+    await store.set(`wallet/${who.uuid}`, w);
+    return json({ ...view(w, who.uuid, t), events, ...extra });
   }
 
   async function deliver(to, message) {
@@ -205,10 +220,28 @@ export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sess
         else if (typeof id === 'string' && /^[a-z0-9_]{2,40}$/.test(id)) worn[slot] = id;
         else return fail(400, `Bad ${slot}.`);
       }
+      // only what you've unlocked (or what's free) is shown to others
+      const w = await store.get(`wallet/${who.uuid}`);
+      const locked = [];
+      for (const slot of COSMETIC_SLOTS) {
+        if (worn[slot] && !owns(w, worn[slot])) {
+          locked.push(worn[slot]);
+          worn[slot] = null;
+        }
+      }
       await store.set(`cosmetics/${who.uuid}`, { name: who.name, ...worn, at: Date.now() });
       await store.set(`cosname/${who.name.toLowerCase()}`, { uuid: who.uuid });
-      return json({ ok: true, worn });
+      return json({ ok: true, worn, locked });
     },
+
+    // ---- Nimbus coins (website/lib/coins.mjs)
+    'POST coins/state': (req, body, who) => withWallet(who),
+    'POST coins/progress': (req, body, who) => withWallet(who, () => null, { day: String(body.day || ''), stats: body.stats }),
+    'POST coins/buy': (req, body, who) => withWallet(who, (w) => {
+      const id = String(body.id || '');
+      buy(w, id);
+      return { bought: id };
+    }),
     // anyone may look: the game asks about the players around it, by uuid (or by name on
     // offline-mode servers, where uuids aren't the real ones)
     'POST cosmetics/get': async (req, body) => {
@@ -267,6 +300,7 @@ export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sess
       if (!who) return fail(401, 'Sign in again.');
       return await route(req, body, who);
     } catch (err) {
+      if (err.player) return fail(400, err.message);
       return fail(500, err.message || 'Something went wrong.');
     }
   };

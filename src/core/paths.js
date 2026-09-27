@@ -20,6 +20,9 @@ function createPaths(root) {
     features: path.join(root, 'nimbus-features.json'),
     menuImage: path.join(root, 'menu-background.png'),
     cosmetics: path.join(root, 'nimbus-cosmetics.json'),
+    // Nimbus coins: what Nimbus Core counted today, and today's tasks for it to cheer about
+    progress: path.join(root, 'nimbus-progress.json'),
+    tasks: path.join(root, 'nimbus-tasks.json'),
     versionDir: (id) => path.join(root, 'versions', id),
     versionJson: (id) => path.join(root, 'versions', id, `${id}.json`),
     versionJar: (id) => path.join(root, 'versions', id, `${id}.jar`),

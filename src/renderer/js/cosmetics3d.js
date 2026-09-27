@@ -477,7 +477,7 @@ export class CosmeticViewer {
     this.attach.wings.position.set(0, -4, -2);
     this.player.parts.body.add(this.attach.wings);
     this.player.root.add(this.attach.aura);
-    this.attach.pet.position.set(-14, 27, -5);
+    this.attach.pet.position.set(-22, 25, -4);
     this.player.root.add(this.attach.pet);
     for (const [slot, id] of Object.entries(this.items)) this.equip(slot, id, true);
   }
@@ -537,7 +537,7 @@ export class CosmeticViewer {
       p.leftArm.rotation.x = -Math.sin(t * 1.3) * 0.12;
       p.rightArm.rotation.z = -0.06 - Math.sin(t * 1.1) * 0.03;
       p.leftArm.rotation.z = 0.06 + Math.sin(t * 1.1) * 0.03;
-      this.attach.pet.position.set(-14 + Math.sin(t * 0.5) * 2, 27, -5 + Math.cos(t * 0.4) * 2);
+      this.attach.pet.position.set(-22 + Math.sin(t * 0.5) * 2, 25, -4 + Math.cos(t * 0.4) * 2);
     } else {
       const dist = (this.fitSize || 16) * 2.2;
       this.camera.position.set(Math.sin(this.yaw) * dist, Math.sin(0.35) * dist, Math.cos(this.yaw) * dist);

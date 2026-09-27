@@ -255,12 +255,13 @@ public final class Cosmetics {
 						m.translate(rx, ry + neck, rz).rotateY(-headYaw * D2R).rotateX(pitch * D2R).scale(PX).translate(0, 8, 0);
 					}
 					case 1 -> { // pet: follows beside your shoulder
-						// (-14, 27, -5) in the body's frame: right of the shoulder, a little behind
+						// (-22, 25, -4) in the body's frame: right of the shoulder and a little behind,
+						// far enough out that even the big pets stay clear of your head and arm
 						double cos = Math.cos(bodyYaw * D2R);
 						double sin = Math.sin(bodyYaw * D2R);
-						double tx = x + (-14 * cos + 5 * sin) * PX;
-						double ty = y + (lying ? 0.6 : 27 * PX);
-						double tz = z + (-14 * sin - 5 * cos) * PX;
+						double tx = x + (-22 * cos + 4 * sin) * PX;
+						double ty = y + (lying ? 0.6 : 25 * PX);
+						double tz = z + (-22 * sin - 4 * cos) * PX;
 						if (!live.petPlaced || Math.abs(live.petX - tx) + Math.abs(live.petY - ty) + Math.abs(live.petZ - tz) > 8) {
 							live.petX = tx;
 							live.petY = ty;

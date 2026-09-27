@@ -355,4 +355,111 @@ critter('duck', 'Rubber Duck', 'common', 'Squeak. Bobs like it\'s in the bath.',
     [fx('heart', { at: [0, 0, 0], rate: 2, v: [0, 4, 0], sp: 4, life: 1.4, c: [0xff3b7a, 0xff9ec7] })]);
 }
 
+// ------------------------------------------------------------------ 1.7.0: more pets
+
+critter('chick', 'Cloud Chick', 'common', 'Fluffy, yellow and very proud of its little hops.', () => {
+  const b = new Vox().sphere(0, 1.5, 0, 2.4, 0xffe16f).box(-1, 1, 2, 2, 1, 2, 0xff9a1a);
+  eyes(b, 2, 2, 1);
+  b.set(-3, 1, -1, 0xffd24a).set(2, 1, -1, 0xffd24a);
+  return { body: b };
+}, [hop(2, 1.4), twitch('y', 20, 2.5)], [], 11);
+critter('bunny', 'Cloud Bunny', 'common', 'Twitchy nose, floppy ears, endless hopping.', () => {
+  const b = new Vox().box(-2, 0, -3, 4, 3, 5, 0xf4f0f8).box(-2, 2, 1, 4, 3, 3, 0xf4f0f8).set(-1, 3, 4, 0xff9ec7).set(0, 3, 4, 0xff9ec7);
+  eyes(b, 4, 4, 1, 0x3a2a4a).sphere(0, 1, -4, 1.3, 0xffffff);
+  const ear = (x) => new Vox().box(x, 0, 0, 1, 4, 1, 0xf4f0f8).box(x, 1, 1, 1, 2, 1, 0xff9ec7);
+  return { body: b, parts: [part({ p: [-2, 5, 2], a: [sway('x', 12, 1.3)], vox: ear(0) }), part({ p: [1, 5, 2], a: [sway('x', 12, 1.3, 0.25)], vox: ear(0) })] };
+}, [hop(2.5, 1.1)], [], 12);
+critter('sheep', 'Cloud Sheep', 'common', 'Hard to tell where the sheep ends and the cloud begins.', () => {
+  const b = new Vox().sphere(0, 2, 0, 3.4, (x, y, z) => ((x + y + z) % 2 ? 0xffffff : 0xeeeef4), 0, 2.6, 3.8).box(-1, 1, 3, 3, 3, 2, 0xd9c2a6);
+  eyes(b, 3, 5, 1).set(0, 1, 5, 0xff9ec7);
+  return { body: b };
+}, [sway('z', 4, 0.4), twitch('x', 10, 5)], [], 13);
+critter('snail', 'Cloud Snail', 'common', 'In no hurry at all. Its shell swirls.', () => {
+  const b = new Vox().box(-1, 0, -3, 3, 2, 7, 0x9fd46a).box(-1, 2, 3, 3, 2, 1, 0x9fd46a).set(-1, 4, 3, 0x14141c).set(1, 4, 3, 0x14141c);
+  b.sphere(0.5, 3.5, -1, 3, (x, y, z) => mix(0xd07a2a, 0xffc98a, ((Math.atan2(y - 3.5, z + 1) + Math.PI) * 2 % 1.6) / 1.6), 0, 3, 2.6);
+  return { body: b };
+}, [sway('y', 6, 0.15)], [], 14);
+critter('creeper', 'Mini Creeper', 'rare', 'Tssss... it swells up now and then, but never goes off.', () => {
+  const b = new Vox().box(-2, 0, -1, 4, 4, 2, (x, y, z) => mix(0x4fb80f, 0x2f8a3a, ((x * 3 + y * 7 + z * 5) & 3) / 3)).box(-2, 4, -2, 4, 4, 4, (x, y, z) => mix(0x5fd35f, 0x3f9f2f, ((x * 5 + y * 3 + z * 7) & 3) / 3));
+  b.box(-2, 6, 2, 1, 1, 1, 0x14141c).box(1, 6, 2, 1, 1, 1, 0x14141c).box(-1, 4, 2, 2, 2, 1, 0x14141c).set(-2, 4, 2, 0x14141c).set(1, 4, 2, 0x14141c);
+  return { body: b };
+}, [pulse(0.08, 0.4), trick('y', 7, 0.6)], [fx('smoke', { at: [0, 4, 0], rate: 0.6, v: [0, 3, 0], sp: 2, life: 1.2, c: [0xd9dee8], glow: false })], 15);
+winged('allay', 'Allay', 'epic', 'A little blue spirit that loves music.', () => {
+  const b = new Vox().sphere(0, 2, 0, 1.9, alpha(0x7ad8ff, 0.85), SEE).box(-1, -2, -1, 2, 3, 2, alpha(0x4cc3f0, 0.85), SEE);
+  b.set(-1, 2, 1, 0x0e3a5a).set(0, 2, 1, 0x0e3a5a);
+  return b;
+}, (c, r) => alpha(mix(0xbff4ff, 0x7ad8ff, r / 4), 0.6), ['.##.', '####', '*##.'], 2.4, [fx('note', { at: [0, 3, 0], rate: 1.5, v: [0, 4, 0], sp: 4, life: 1.4, c: [0x7ad8ff, 0xbff4ff] })]);
+pet('robot', 'Robo Buddy', 'rare', 'Beep boop. Its antenna blinks and its eyes scan around.', [
+  part({ a: [bob(1, 0.6)], vox: (() => {
+    const v = new Vox().box(-3, -3, -2, 6, 5, 4, 0xb8c0cc).box(-2, -4, -1, 4, 1, 2, 0x6b708a).box(-2, 2, -2, 4, 3, 4, 0xd9dee8);
+    v.box(-2, 3, 2, 4, 1, 1, 0x14141c).box(-4, -1, -1, 1, 2, 2, 0x6b708a).box(3, -1, -1, 1, 2, 2, 0x6b708a).box(-1, -1, 2, 2, 1, 1, 0x22d3ee, GLOW);
+    return v;
+  })(), c: [
+    part({ p: [-1.5, 3.5, 3], a: [orbit(0.7, 120)], vox: new Vox().set(0, 0, 0, 0xff3b5c, GLOW) }),
+    part({ p: [0.5, 3.5, 3], a: [orbit(0.7, 120)], vox: new Vox().set(0, 0, 0, 0xff3b5c, GLOW) }),
+    part({ p: [0, 5, 0], a: [sway('z', 10, 1)], vox: new Vox().line([0, 0, 0], [0, 3, 0], 0x6b708a).set(0, 4, 0, 0xffe16f, GLOW | FLICKER) }),
+  ] }),
+], [fx('spark', { at: [0, -4, 0], rate: 6, v: [0, -8, 0], sp: 2, life: 0.4, c: [0x22d3ee, 0xffffff] })]);
+pet('octopus', 'Sky Octopus', 'epic', 'Eight wiggly arms, swimming through the air.', (() => {
+  const head = new Vox().sphere(0, 2, 0, 3, (x, y, z, dx, dy) => (dy > 0.5 && (x + z) % 3 === 0 ? 0xd96aff : 0xb04ad9), 0, 3.4, 3);
+  head.set(-2, 1, 2, 0xffffff).set(1, 1, 2, 0xffffff).set(-2, 1, 3, 0x14141c).set(1, 1, 3, 0x14141c);
+  const arms = [];
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * Math.PI * 2;
+    const arm = new Vox();
+    for (let i = 0; i < 5; i++) arm.set(0, -i, 0, i % 2 ? 0xc05ae8 : 0xb04ad9);
+    arms.push(part({ p: [Math.cos(a) * 2, -1, Math.sin(a) * 2], a: [sway('x', 20, 1.1, k / 8), sway('z', 16, 0.8, k / 5)], vox: arm }));
+  }
+  return [part({ a: [bob(1.5, 0.45), sway('x', 6, 0.45)], vox: head, c: arms })];
+})(), [fx('bubble', { at: [0, 0, 0], rate: 2.5, v: [0, 4, 0], sp: 3, life: 1.4, c: [0xd8f4ff], glow: false })]);
+pet('shark', 'Sky Shark', 'epic', 'It swims circles round you. Friendly. Mostly.', (() => {
+  const body = new Vox();
+  for (let z = -6; z <= 5; z++) {
+    const r = z > 3 ? 5 - z + 0.4 : z < -3 ? 1 + (z + 6) * 0.4 : 2.3;
+    body.sphere(0, 0, z, Math.max(0.6, r), (x, y) => (y < 0 ? 0xf4f6ff : 0x6b8aa6), 0, Math.max(0.6, r * 0.9), 1);
+  }
+  body.box(0, 2, -1, 1, 3, 2, 0x6b8aa6).set(-2, 1, 3, 0x14141c).set(1, 1, 3, 0x14141c).box(-1, -1, 4, 3, 1, 1, 0xffffff);
+  const tail = new Vox().box(0, -2, -2, 1, 5, 2, 0x6b8aa6);
+  // round and round, always facing the way it swims
+  return [part({ a: [spin('y', -70)], c: [part({ p: [4, 0, 0], a: [sway('z', 8, 0.5), bob(0.8, 0.4)], vox: body, c: [part({ p: [0, 0, -7], a: [sway('y', 25, 1.2)], vox: tail })] })] })];
+})(), [fx('bubble', { at: [0, 0, 0], rate: 2, v: [0, 3, 0], sp: 2, life: 1.2, c: [0xd8f4ff], glow: false })]);
+pet('whale', 'Sky Whale', 'legendary', 'A little whale that swims through the clouds and sprays glitter.', (() => {
+  const body = new Vox();
+  body.sphere(0, 0, 0, 3.4, (x, y, z, dx, dy) => (dy < -0.35 ? 0xe8f4ff : (y + z) % 4 === 0 ? 0x3a6fcf : 0x4a82e0), 0, 3, 5.4);
+  body.set(-3, 0, 3, 0x14141c).set(2, 0, 3, 0x14141c);
+  const fin = (s) => new Vox().box(s > 0 ? 0 : -3, 0, 0, 3, 1, 2, 0x3a6fcf);
+  const tail = new Vox().box(-3, 0, -1, 7, 1, 2, 0x3a6fcf).box(-1, 0, 0, 3, 1, 1, 0x2a5aa8);
+  return [part({ a: [bob(1.4, 0.35), sway('x', 6, 0.35)], vox: body, c: [
+    part({ p: [-3, -1, 1], a: [flap('z', 25, 0.8)], vox: fin(-1) }),
+    part({ p: [3, -1, 1], a: [flap('z', -25, 0.8)], vox: fin(1) }),
+    part({ p: [0, 0, -6], a: [sway('x', 20, 0.7)], vox: tail }),
+  ] })];
+})(), [fx('drop', { at: [0, 3, 1], rate: 10, v: [0, 16, 0], sp: 4, life: 0.8, g: -30, c: [0x9fe7ff, 0xffffff], glow: false }), fx('spark', { at: [0, 4, 1], rate: 4, v: [0, 10, 0], sp: 6, life: 1, c: [0xffffff, 0xffe16f] })]);
+pet('comet', 'Pet Comet', 'legendary', 'A tiny comet with a burning tail, circling your shoulder.', [
+  part({ a: [orbit(3.5, 120), bob(1, 0.8)], vox: new Vox().sphere(0, 0, 0, 1.8, (x, y, z, dx, dy) => mix(0xfff6c8, 0x9fe7ff, (dy + 1) / 2), GLOW) }),
+], [fx('spark', { at: [0, 0, 0], rate: 30, v: [0, 0, 0], sp: 1.5, life: 0.7, c: [0x9fe7ff, 0xffffff, 0xc4a8ff] }), fx('star', { at: [0, 0, 0], rate: 3, v: [0, 1, 0], sp: 4, life: 1, c: [0xffffff] })]);
+pet('wither_mini', 'Mini Wither', 'mythic', 'Three little skulls that float, glare and cackle. Scary cute.', (() => {
+  const skull = (s) => {
+    const v = new Vox().box(-2, -2, -2, 4, 4, 4, 0x2a2c36).box(-2, -1, 2, 1, 1, 1, 0xd9e6ff, GLOW).box(1, -1, 2, 1, 1, 1, 0xd9e6ff, GLOW).box(-1, -2, 2, 2, 1, 1, 0x14151c);
+    return s < 1 ? v : v;
+  };
+  const spine = new Vox().box(-4, -1, -1, 9, 1, 1, 0x3a3d4f).box(0, -6, -1, 1, 6, 1, 0x3a3d4f);
+  for (let y = -5; y <= -1; y += 2) spine.box(-2, y, -1, 5, 1, 1, 0x3a3d4f);
+  return [part({ a: [bob(1.2, 0.5)], vox: spine, c: [
+    part({ p: [0.5, 2, 0], a: [sway('y', 20, 0.4), twitch('x', 12, 3)], vox: skull(1) }),
+    part({ p: [-4.5, 1, 0], s: 0.75, a: [sway('y', 25, 0.5, 0.3)], vox: skull(0) }),
+    part({ p: [5.5, 1, 0], s: 0.75, a: [sway('y', 25, 0.5, 0.6)], vox: skull(0) }),
+  ] })];
+})(), [fx('smoke', { at: [0, 0, 0], rate: 4, v: [0, 3, 0], sp: 3, life: 1.2, c: [0x2a2c36, 0x3a3d4f], glow: false }), fx('spark', { at: [0, 2, 2], rate: 3, v: [0, 2, 4], sp: 3, life: 0.6, c: [0xd9e6ff] })]);
+pet('pet_diamond_golem', 'Diamond Golem', 'legendary', 'A tiny golem made of diamond. Proof you really went mining.', [
+  part({ a: [bob(0.8, 0.5)], vox: (() => {
+    const v = new Vox().box(-3, -2, -2, 6, 5, 4, (x, y, z) => mix(0x2fd6d0, 0xb8fff9, ((x * 3 + y * 5 + z * 7) & 3) / 3)).box(-2, 3, -2, 4, 3, 4, (x, y, z) => mix(0x3fe6e0, 0xc8fff9, ((x * 5 + y * 3 + z) & 3) / 3));
+    v.set(-2, 4, 2, 0x0a3a3a).set(1, 4, 2, 0x0a3a3a).box(-2, -5, -1, 2, 3, 2, 0x2fb6b0).box(0, -5, -1, 2, 3, 2, 0x2fb6b0);
+    return v;
+  })(), c: [
+    part({ p: [-3.5, 2, 0], a: [sway('x', 20, 0.8)], vox: new Vox().box(-2, -5, -1, 2, 5, 2, 0x3fe6e0) }),
+    part({ p: [3.5, 2, 0], a: [sway('x', -20, 0.8)], vox: new Vox().box(0, -5, -1, 2, 5, 2, 0x3fe6e0) }),
+  ] }),
+], [fx('spark', { at: [0, 0, 0], rate: 5, v: [0, 2, 0], sp: 6, life: 0.9, c: [0xb8fff9, 0xffffff] })]);
+
 export default items;
