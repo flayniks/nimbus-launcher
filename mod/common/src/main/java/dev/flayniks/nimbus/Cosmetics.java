@@ -108,6 +108,25 @@ public final class Cosmetics {
 		return k.worn;
 	}
 
+	/**
+	 * Whether a player plays with Nimbus: you do, and others do when the Nimbus service knows them
+	 * (the same lookup as their cosmetics, so it costs nothing extra). Unknown yet counts as no.
+	 */
+	public static boolean isNimbus(UUID uuid, String name) {
+		try {
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player != null && mc.player.getUUID().equals(uuid)) return true;
+			if (API == null || API.isBlank() || uuid == null) return false;
+			String key = uuid.toString().replace("-", "");
+			Known k = KNOWN.computeIfAbsent(key, (x) -> new Known(name));
+			if (!k.wanted && System.currentTimeMillis() - k.at > KEEP_MS) k.wanted = true;
+			startFetcher();
+			return k.worn != null;
+		} catch (Throwable t) {
+			return false;
+		}
+	}
+
 	private static synchronized void startFetcher() {
 		if (fetcher != null && fetcher.isAlive()) return;
 		fetcher = new Thread(() -> {

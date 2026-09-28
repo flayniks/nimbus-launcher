@@ -237,6 +237,8 @@ final class Features {
 		ROWS.add(action(util, "Background picture", "Pick a PNG from your computer for the menu background", "Choose…", MenuBackground::choose));
 		ROWS.add(toggle(util, "menu.shortcut", true, "Right Shift opens this menu", "Press Right Shift in game to open Nimbus Features"));
 		ROWS.add(toggle(util, "cosmetics.others", true, "Other players' cosmetics", "Show the hats, pets, wings and auras other Nimbus players wear. Pick yours in the launcher"));
+		ROWS.add(toggle(util, "clips.key", true, "F8 saves a replay clip", "Saves the last seconds of your game as a video. Turn on Replay clips in the launcher's settings first"));
+		ROWS.add(toggle(util, "badge.nametag", true, "Nimbus badges", "A little cloud before the names of players on Nimbus, above their heads and in the player list"));
 
 		int fx = 3;
 		Row crazy = toggle(fx, "fx.crazy", false, "Crazy animations", "A LOT of wild effects: menus burst in, rainbow cursor, glowing buttons, LEVEL UP explosions, combos and more");

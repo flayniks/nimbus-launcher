@@ -1,7 +1,7 @@
 {
   "name": "nimbus-launcher",
   "productName": "Nimbus Launcher",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "A fast Minecraft: Java Edition launcher with Modrinth mods, modpacks, shaders and resource packs, every loader, every version, and a one-click FPS boost.",
   "main": "main.js",
   "license": "MIT",
@@ -49,6 +49,7 @@
       "package.json",
       "splash-preload.js",
       "net-preload.js",
+      "clip-preload.js",
       "!node_modules/three/**",
       "!node_modules/@types/**",
       "!node_modules/skinview-utils/**",

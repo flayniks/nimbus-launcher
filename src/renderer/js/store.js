@@ -11,6 +11,7 @@ export const store = {
   running: new Set(),
   versions: null,
   update: { state: 'idle' },
+  modUpdates: new Map(), // instance id -> updates found on Modrinth
 
   on(event, fn) {
     if (!listeners.has(event)) listeners.set(event, new Set());
@@ -53,6 +54,15 @@ export const store = {
     return found;
   },
 };
+
+api.on('content:updates', (e) => {
+  store.modUpdates.set(e.instanceId, e.updates);
+  store.emit('mod-updates', e);
+});
+api.content.updatesKnown().then((all) => {
+  for (const [id, list] of Object.entries(all || {})) store.modUpdates.set(id, list);
+  store.emit('mod-updates', {});
+}).catch(() => {});
 
 api.on('task', (t) => {
   store.tasks.set(t.id, t);

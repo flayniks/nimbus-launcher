@@ -1,6 +1,7 @@
 import { h, icon, clear, instanceIcon, fmtAgo, fmtDuration, fmtBytes, LOADER_NAMES, fail, ok, info, confirmDialog, segmented, toggle, rangeFill, liveProgress, taskProgress } from '../ui.js';
 import { api, store } from '../store.js';
 import { go, play } from '../router.js';
+import { examine } from '../doctor.js';
 
 const KINDS = [
   { key: 'mod', label: 'Mods', icon: 'box' },
@@ -88,8 +89,16 @@ export function render(page, params) {
   function contentTab(root) {
     let kind = 'mod';
     let items = [];
+    let updates = store.modUpdates.get(inst.id) || [];
+    let updating = false;
     const listEl = h('div.content-list');
-    const updatesBtn = h('button.btn.sm', { icon: 'refresh', onclick: checkUpdates }, 'Check for updates');
+    const updatesBtn = h('button.btn.sm', { icon: 'refresh', onclick: () => (updates.length ? updateAll() : checkUpdates(true)) });
+    const drawUpdatesBtn = () => {
+      updatesBtn.classList.toggle('primary', updates.length > 0);
+      updatesBtn.disabled = updating;
+      updatesBtn.replaceChildren(updating ? h('i.spinner') : icon('refresh'), updating ? 'Updating…' : updates.length ? `Update all (${updates.length})` : 'Check for updates');
+    };
+    drawUpdatesBtn();
     const sub = segmented(KINDS.map((k) => ({ value: k.key, label: k.label, icon: k.icon })), kind, (v) => { kind = v; draw(); });
     root.append(
       h('div.toolbar', sub, h('div', { style: { flex: 1 } }),
@@ -139,12 +148,13 @@ export function render(page, params) {
         return;
       }
       list.forEach((item, i) => {
+        const upd = updates.find((u) => u.rel === item.rel);
         const pic = item.meta?.builtin ? h('div.ph.builtin', h('img', { src: 'img/logo.svg', alt: '' }))
           : item.meta?.icon ? h('img', { src: item.meta.icon, alt: '', loading: 'lazy', decoding: 'async' }) : h('div.ph', icon(KINDS.find((k) => k.key === item.type).icon));
         const row = h(`div.content-item${item.enabled ? '' : '.off'}`, { style: { animation: `rise .35s var(--ease) both ${Math.min(i, 15) * 22}ms` } },
           pic,
           h('div', { style: { minWidth: 0 } },
-            h('div.t', item.meta?.title || item.file.replace(/\.(jar|zip)$/i, '')),
+            h('div.t', item.meta?.title || item.file.replace(/\.(jar|zip)$/i, ''), upd ? h('button.tag.upd', { title: `Update ${item.meta?.title} to ${upd.to}`, onclick: () => updateAll([upd]) }, icon('refresh'), upd.to) : null),
             h('div.f', [item.meta?.versionNumber, item.file, fmtBytes(item.size)].filter(Boolean).join(' · '))),
           item.meta?.builtin ? h('span.tag.accent', { title: 'Nimbus Core is part of the launcher: it gives the game the Nimbus loading screen and is always on.' }, icon('lock'), 'Built in') : toggle(item.enabled, async (on) => {
             try {
@@ -176,30 +186,45 @@ export function render(page, params) {
       } catch (err) { fail('Could not read content', err); }
     }
 
-    async function checkUpdates() {
+    async function checkUpdates(say = false) {
+      if (updating) return;
       updatesBtn.disabled = true;
       updatesBtn.replaceChildren(h('i.spinner'), 'Checking');
       try {
-        await api.content.identify(inst.id).catch(() => {});
-        const updates = await api.content.updates(inst.id);
-        if (!updates.length) ok('Everything is up to date');
-        else {
-          info(`${updates.length} update${updates.length > 1 ? 's' : ''} found`, updates.slice(0, 4).map((u) => `${u.title} ${u.from} → ${u.to}`).join('\n'), {
-            timeout: 0,
-            actions: [{ label: 'Update all', run: () => api.content.update(inst.id, updates).then(() => { ok('Updated'); refresh(); }).catch((e) => fail('Update failed', e)) }],
-          });
-        }
+        updates = await api.content.updates(inst.id);
+        if (say && !updates.length) ok('Everything is up to date');
+        draw();
       } catch (err) {
-        fail('Could not check for updates', err);
+        if (say) fail('Could not check for updates', err);
       } finally {
-        updatesBtn.disabled = false;
-        updatesBtn.replaceChildren(icon('refresh'), 'Check for updates');
+        drawUpdatesBtn();
+      }
+    }
+
+    /** Updates everything that has one (or just `only`), in one go. */
+    async function updateAll(only = null) {
+      const list = only || updates;
+      if (!list.length || updating) return;
+      updating = true;
+      drawUpdatesBtn();
+      try {
+        await api.content.update(inst.id, list);
+        ok(list.length === 1 ? `Updated ${list[0].title}` : `Updated ${list.length} things`, list.slice(0, 5).map((u) => `${u.title} ${u.from} → ${u.to}`).join('\n'));
+        updates = updates.filter((u) => !list.includes(u));
+        await refresh();
+      } catch (err) {
+        fail('Update failed', err);
+      } finally {
+        updating = false;
+        drawUpdatesBtn();
       }
     }
 
     refresh().then(() => {
       // put names and icons on files that came from elsewhere, in the background
       if (items.some((i) => !i.meta)) api.content.identify(inst.id).then((n) => { if (n) refresh(); }).catch(() => {});
+      // and see whether anything has a newer build (quietly: the button says so)
+      if (inst.loader !== 'vanilla' || items.length) checkUpdates(false);
     });
     const off = store.on('task', (t) => { if (t.instanceId === inst.id && t.state === 'done') refresh(); });
     return off;
@@ -311,6 +336,7 @@ export function render(page, params) {
     root.append(h('div.toolbar',
       status,
       h('div', { style: { flex: 1 } }),
+      h('button.btn.sm', { icon: 'wrench', title: 'Look at the last crash and suggest fixes', onclick: () => examine(inst).catch((e) => fail('The crash doctor could not look', e)) }, 'Crash doctor'),
       h('button.btn.sm', { icon: 'copy', onclick: () => { navigator.clipboard.writeText(out.innerText); ok('Copied the log'); } }, 'Copy'),
       h('button.btn.sm', { icon: 'folder', onclick: () => api.instances.open(inst.id, 'logs') }, 'Logs folder'),
       h('button.btn.sm', { icon: 'x', onclick: () => { clear(out); count = 0; } }, 'Clear')), out);

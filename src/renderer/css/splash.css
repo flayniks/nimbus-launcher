@@ -112,6 +112,30 @@ body { display: grid; place-items: center; font: 13px/1.4 'Inter', 'Segoe UI Var
 @keyframes indet { from { left: -32%; } to { left: 100%; } }
 
 .hint { position: absolute; bottom: 12px; font-size: 10.5px; color: rgba(139, 144, 165, 0.6); animation: fade 0.6s 2s both; }
+
+/* Cloud Hop, the minigame for the wait */
+.play {
+  display: inline-flex; align-items: center; gap: 7px; margin-top: 16px; padding: 6px 13px 6px 10px; border-radius: 99px; cursor: pointer;
+  font: inherit; font-size: 11.5px; font-weight: 600; color: #e9e5ff;
+  background: color-mix(in srgb, var(--a1) 22%, rgba(255, 255, 255, 0.04)); border: 1px solid color-mix(in srgb, var(--a2) 40%, transparent);
+  animation: fade 0.6s 1.2s both; transition: transform 0.15s var(--spring), background 0.15s;
+}
+.play:hover { transform: translateY(-1px) scale(1.03); background: color-mix(in srgb, var(--a1) 36%, rgba(255, 255, 255, 0.04)); }
+.play i { width: 0; height: 0; border-left: 8px solid var(--a2); border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
+.game, .hide { display: none; }
+.hide {
+  position: absolute; top: 14px; right: 14px; z-index: 2; padding: 3px 10px; border-radius: 99px; cursor: pointer;
+  font: inherit; font-size: 10.5px; font-weight: 600; color: #d6d8e4; background: rgba(10, 8, 30, 0.6); border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.hide:hover { background: rgba(10, 8, 30, 0.85); }
+body.playing .card { justify-content: flex-start; padding-top: 8px; }
+body.playing .stage, body.playing .word, body.playing .sub, body.playing .play, body.playing .hint, body.playing .particles { display: none; }
+body.playing .game { display: block; animation: fade 0.3s both; }
+body.playing .hide { display: block; }
+body.playing .instance { margin-top: 12px; animation: none; }
+body.playing .status { width: 80%; margin-top: 10px; animation: none; }
+.hop { display: block; border-radius: 19px 19px 8px 8px; cursor: pointer; image-rendering: pixelated; }
+body.ready .status .row span:first-child { color: #86efac; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; } }
 
 /* options from Settings → Animations */

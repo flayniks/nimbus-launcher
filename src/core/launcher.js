@@ -21,6 +21,8 @@ const { Builtin } = require('./builtin');
 const packs = require('./packs');
 const { CONTENT_DIRS } = require('./instances');
 const skins = require('./skins');
+const crashdoctor = require('./crashdoctor');
+const importer = require('./importer');
 
 const DEFAULT_SETTINGS = {
   concurrency: 16,
@@ -44,6 +46,10 @@ const DEFAULT_SETTINGS = {
   sidebarLabels: false,
   showCounter: true,
   showOtherCosmetics: true, // other Nimbus players' hats, pets, wings and auras in game
+  replayClips: false, // record the game window so F8 can save the last seconds
+  clipSeconds: 30,
+  clipQuality: 'normal',
+  clipAudio: true,
   discordStatus: true, // what you're playing, on your Discord profile
   discordServer: true, // include the server's name (never an IP address)
   shareOnline: true,
@@ -88,6 +94,7 @@ class Launcher extends EventEmitter {
     this.tasks = new Map();
     this.running = new Map();
     this.logs = new Map();
+    this.earlyDoctor = new Set(); // runs the crash doctor already looked at while the game was up
     this.busy = new Set();
     this.installs = new Map();
   }
@@ -193,6 +200,36 @@ class Launcher extends EventEmitter {
     // get the downloads out of the way now so the first Play is instant
     this.installInstance(inst.id).catch(() => {});
     return inst;
+  }
+
+  /** Instances from other launchers on this computer, marking the ones already brought over. */
+  async importScan(folder = null) {
+    const found = folder ? await importer.scanFolder(folder) : await importer.scan();
+    const have = new Set((await this.instances.list()).map((i) => i.importedFrom).filter(Boolean));
+    return found.map((f) => ({ ...f, imported: have.has(f.path) }));
+  }
+
+  /** Brings instances over from other launchers: a Nimbus instance each, with their game folder copied in. */
+  async importInstances(folders) {
+    const made = [];
+    for (const folder of folders) {
+      const info = await importer.readInstance(folder);
+      if (!info?.mcVersion) throw new Error(`Couldn't tell which Minecraft version ${path.basename(folder)} is.`);
+      const inst = await this.task(`Importing ${info.name}`, async (ctx, stage) => {
+        stage('Setting up');
+        let loaderVersion = info.loaderVersion;
+        if (info.loader !== 'vanilla' && !loaderVersion) loaderVersion = loaders.pickDefault(await loaders.listLoaderVersions(info.loader, info.mcVersion));
+        const created = await this.instances.create({ name: info.name, mcVersion: info.mcVersion, loader: info.loader, loaderVersion, importedFrom: folder });
+        stage('Copying mods, worlds and settings');
+        await importer.copyGame(info.gameDir, this.paths.gameDir(created.id), (name) => stage(`Copying ${name}`));
+        return created;
+      });
+      made.push(inst);
+      // names and icons for the mods, and the game files, in the background
+      modrinth.identifyContent({ paths: this.paths }, this.instances, inst.id).catch(() => {});
+      this.installInstance(inst.id).catch(() => {});
+    }
+    return made;
   }
 
   async installInstance(id, { deep = false } = {}) {
@@ -326,7 +363,25 @@ class Launcher extends EventEmitter {
       let pending = [];
       let timer = null;
       const parser = new LogParser();
-      const flush = () => { timer = null; if (pending.length) { this.log(id, pending); pending = []; } };
+      // mod loading failed: Fabric and Forge then show their own error window and wait, so the
+      // crash doctor steps in as soon as the log says so instead of when the game closes
+      const FATAL = /Incompatible mods found!|Mod resolution failed|Missing or unsupported mandatory dependencies|Mod loading has failed|Failed to create mod instance|Mixin apply for mod .* failed|MixinApplyError|Could not execute entrypoint stage/;
+      let early = false;
+      const flush = () => {
+        timer = null;
+        if (!pending.length) return;
+        if (!early && pending.some((l) => FATAL.test(l))) {
+          early = true;
+          this.earlyDoctor.add(id);
+          setTimeout(() => {
+            this.examine(id, { code: null, since: started }).then((doctor) => {
+              if (doctor) this.emit('doctor', { instanceId: id, doctor });
+            }).catch(() => {});
+          }, 1500);
+        }
+        this.log(id, pending);
+        pending = [];
+      };
       const started = Date.now();
       const { child, commandLine } = await spawnGame({
         java: prep.java, gameDir: prep.gameDir, built, account, detach,
@@ -371,11 +426,100 @@ class Launcher extends EventEmitter {
         if (recent[0]) crash = path.join(dir, recent[0].f);
       } catch { /* no crash report folder */ }
     }
+    let inst = null;
     try {
-      const inst = await this.instances.get(id);
+      inst = await this.instances.get(id);
       await this.instances.update(id, { playTime: (inst.playTime || 0) + seconds });
     } catch { /* deleted while running */ }
-    this.emit('game-state', { instanceId: id, running: false, code, crash, seconds, killed });
+    // a crash: the crash doctor has a look before anyone is told
+    let doctor = null;
+    const already = this.earlyDoctor.delete(id);
+    if (inst && code !== 0 && code !== null && !killed && !already) {
+      doctor = await this.examine(id, { code, since: started, crashFile: crash }).catch(() => null);
+    }
+    this.emit('game-state', { instanceId: id, running: false, code, crash, seconds, killed, doctor });
+  }
+
+  /** The crash doctor's diagnosis for an instance (after a crash, or on demand from the console). */
+  async examine(id, { code = null, since = 0, crashFile = null } = {}) {
+    const inst = await this.instances.get(id);
+    const gameDir = this.paths.gameDir(id);
+    if (!crashFile && since === 0) {
+      // on demand: the newest crash report, if there is one
+      try {
+        const dir = path.join(gameDir, 'crash-reports');
+        const files = (await fsp.readdir(dir)).filter((f) => f.endsWith('.txt'));
+        let best = null;
+        for (const f of files) {
+          const t = (await fsp.stat(path.join(dir, f))).mtimeMs;
+          if (!best || t > best.t) best = { f, t };
+        }
+        if (best) crashFile = path.join(dir, best.f);
+      } catch { /* none */ }
+    }
+    const result = await crashdoctor.examine({ gameDir, instance: inst, code, since, log: this.getLog(id), crashFile, totalMB: boost.systemInfo().totalMB });
+    return result && { ...result, crashFile };
+  }
+
+  /** Does one of the crash doctor's fixes. */
+  async applyFix(id, fix) {
+    const inst = await this.instances.get(id);
+    const gameDir = this.paths.gameDir(id);
+    const safeRel = (rel, dir) => {
+      const r = String(rel || '').replace(/\\/g, '/');
+      if (!r.startsWith(`${dir}/`) || r.split('/').includes('..')) throw new Error('That file is not in this instance.');
+      return r;
+    };
+    switch (fix?.kind) {
+      case 'disable':
+        await this.instances.setContentEnabled(id, safeRel(fix.rel, 'mods'), false);
+        return { done: 'Turned off' };
+      case 'install':
+        return this.task(`Adding ${fix.label?.replace(/^Add /, '') || fix.project} to ${inst.name}`, (ctx) => modrinth.installProject(ctx, this.instances, inst, String(fix.project)), { instanceId: id });
+      case 'update': {
+        const rel = safeRel(fix.rel, 'mods');
+        let meta = (await this.instances.contentManifest(id))[rel];
+        if (!meta?.projectId) {
+          await modrinth.identifyContent({ paths: this.paths }, this.instances, id).catch(() => {});
+          meta = (await this.instances.contentManifest(id))[rel];
+        }
+        if (!meta?.projectId) throw new Error('Nimbus couldn\'t find that mod on Modrinth, so it can\'t update it. Turn it off instead.');
+        const version = await modrinth.compatibleVersion(meta.projectId, 'mod', inst);
+        if (!version) throw new Error(`There's no build of ${meta.title} for ${inst.mcVersion} yet. Turn it off for now.`);
+        if (version.id === meta.versionId) throw new Error(`${meta.title} is already the newest build for ${inst.mcVersion}. Turn it off instead.`);
+        return this.task(`Updating ${meta.title}`, (ctx) => modrinth.installProject(ctx, this.instances, inst, meta.projectId, version.id), { instanceId: id });
+      }
+      case 'memory': {
+        const mb = Math.max(1024, Math.min(Number(fix.mb) || 4096, 65536));
+        await this.instances.update(id, { memory: { ...(inst.memory || {}), max: mb } });
+        return { done: `Memory set to ${Math.round(mb / 102.4) / 10} GB` };
+      }
+      case 'java':
+        await this.instances.update(id, { javaPath: null });
+        return { done: 'Using the Java Nimbus picks' };
+      case 'repair':
+        return this.installInstance(id, { deep: true });
+      case 'reset-config': {
+        const rel = safeRel(fix.rel, 'config');
+        const abs = path.join(gameDir, ...rel.split('/'));
+        await fsp.rename(abs, `${abs}.broken-${Date.now()}`);
+        return { done: 'Reset' };
+      }
+      case 'shaders-off': {
+        for (const name of ['iris.properties', 'oculus.properties']) {
+          const f = path.join(gameDir, 'config', name);
+          const text = await fsp.readFile(f, 'utf8').catch(() => null);
+          if (text === null) continue;
+          await fsp.writeFile(f, /^enableShaders=/m.test(text) ? text.replace(/^enableShaders=.*$/m, 'enableShaders=false') : `${text.trimEnd()}\nenableShaders=false\n`);
+        }
+        const of = path.join(gameDir, 'optionsshaders.txt');
+        const oft = await fsp.readFile(of, 'utf8').catch(() => null);
+        if (oft !== null) await fsp.writeFile(of, oft.replace(/^shaderPack=.*$/m, 'shaderPack=OFF'));
+        return { done: 'Shaders off' };
+      }
+      default:
+        throw new Error('Unknown fix.');
+    }
   }
 
   kill(id) {

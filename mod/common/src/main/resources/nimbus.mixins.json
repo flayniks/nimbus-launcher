@@ -3,6 +3,6 @@
   "package": "dev.flayniks.nimbus.mixin",
   "compatibilityLevel": "${compat}",
   "client": ["LoadingOverlayMixin", "TitleScreenMixin", "PauseScreenMixin", "OptionAccess", "HudMixin", "ContainerScreenMixin",
-    "PanoramaMixin", "ScreenFxMixin", "GameModeMixin", "TickMixin", "PingMixin", "LevelRendererMixin"],
+    "PanoramaMixin", "ScreenFxMixin", "GameModeMixin", "TickMixin", "BadgeMixin", "TabBadgeMixin", "PingMixin", "LevelRendererMixin"],
   "injectors": { "defaultRequire": 0 }
 }

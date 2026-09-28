@@ -1,6 +1,8 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, shell, dialog, safeStorage, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, safeStorage, Menu, nativeImage, protocol, clipboard, ClipboardItem, desktopCapturer } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const fsp = fs.promises;
 const { Launcher } = require('./src/core/launcher');
 const auth = require('./src/core/auth');
 const modrinth = require('./src/core/modrinth');
@@ -15,6 +17,11 @@ let friends = null;
 let lan = null;
 let discord = null;
 let cosmetics = null;
+let servers = null;
+let gallery = null;
+
+// screenshots, their thumbnails and replay clips reach the page through nimbus-media://
+protocol.registerSchemesAsPrivileged([{ scheme: 'nimbus-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
 const { Presence } = require('./src/core/presence');
 const { readJson, writeJson } = require('./src/core/util');
 const { Friends } = require('./src/core/friends');
@@ -22,6 +29,8 @@ const { Lan } = require('./src/core/lan');
 const { DiscordStatus } = require('./src/core/discord');
 const { Cosmetics } = require('./src/core/cosmetics');
 const { services } = require('./src/core/services');
+const { Servers, ping: serverPing, parseAddress } = require('./src/core/servers');
+const { Gallery, clipName } = require('./src/core/gallery');
 
 // a separate data folder (tests, or a second profile) is a separate launcher with its own lock
 if (process.env.NIMBUS_DATA_DIR) app.setPath('userData', path.join(process.env.NIMBUS_DATA_DIR, '.electron'));
@@ -122,7 +131,9 @@ class LaunchSplash {
       resizable: false,
       maximizable: false,
       skipTaskbar: true,
-      focusable: false,
+      // it never takes focus by itself (shown inactive), only for Cloud Hop; on Linux a window
+      // made unfocusable can't be given focus later, so there it starts focusable
+      focusable: process.platform === 'linux',
       hasShadow: false,
       show: false,
       backgroundColor: '#00000000',
@@ -138,6 +149,27 @@ class LaunchSplash {
     this.win.on('closed', () => { this.closed = true; this.cleanup?.(); });
     this.dismiss = (e) => { if (e.sender === this.win.webContents) this.close(); };
     ipcMain.on('splash:dismiss', this.dismiss);
+    // Cloud Hop: the splash takes the keyboard while it's being played
+    this.play = (e) => {
+      if (e.sender !== this.win.webContents || this.win.isDestroyed()) return;
+      this.playing = true;
+      this.win.setFocusable(true);
+      this.win.show();
+      this.win.focus();
+    };
+    ipcMain.on('splash:play', this.play);
+  }
+
+  /** The game's window is up: leave, or with Cloud Hop going, let the page finish the run first. */
+  ready() {
+    if (this.leaveTimer || this.closed) return;
+    if (this.playing) {
+      this.update({ stage: 'Minecraft is ready!', progress: 1, ready: true });
+      this.leaveTimer = setTimeout(() => this.close(), 20000);
+    } else {
+      this.update({ stage: 'Opening the game', progress: 1 });
+      this.leaveTimer = setTimeout(() => this.close(), 2500);
+    }
   }
 
   update(data) {
@@ -148,7 +180,7 @@ class LaunchSplash {
   /** After spawn: read the log until the game window exists, then leave. */
   follow(instanceId, detached) {
     this.update({ stage: 'Starting Minecraft', progress: null });
-    if (detached) { setTimeout(() => this.close(), 8000); return; }
+    if (detached) { setTimeout(() => this.ready(), 5500); return; }
     const onLog = (e) => {
       if (e.instanceId !== instanceId) return;
       for (const line of e.lines) {
@@ -156,9 +188,7 @@ class LaunchSplash {
         else if (/ModLauncher|Forge Mod Loader|FML|NeoForge/.test(line)) this.update({ stage: 'Loading Forge' });
         // the game (or Forge's early loading window) is opening its window; give it a moment to draw
         if (/Backend library|LWJGL Version|ImmediateWindowProvider|Created: .*atlas/i.test(line)) {
-          if (this.leaveTimer) return;
-          this.update({ stage: 'Opening the game', progress: 1 });
-          this.leaveTimer = setTimeout(() => this.close(), 2500);
+          this.ready();
           return;
         }
       }
@@ -168,7 +198,7 @@ class LaunchSplash {
     launcher.on('game-state', onState);
     // alpha, beta and other pre-1.6 versions log almost nothing, their window shows up quickly
     const ancient = /^(rd-|c0\.|in-|inf-|a1\.|b1\.|1\.[0-5](\.|$))/.test(this.inst.mcVersion);
-    const timer = setTimeout(() => this.close(), ancient ? 5000 : 90000);
+    const timer = setTimeout(() => this.ready(), ancient ? 5000 : 90000);
     this.cleanup = () => {
       launcher.off('game-log', onLog);
       launcher.off('game-state', onState);
@@ -182,6 +212,7 @@ class LaunchSplash {
     this.closed = true;
     this.cleanup?.();
     ipcMain.off('splash:dismiss', this.dismiss);
+    ipcMain.off('splash:play', this.play);
     if (this.win.isDestroyed()) return;
     this.win.webContents.send('splash:update', { leaving: true });
     setTimeout(() => { if (!this.win.isDestroyed()) this.win.destroy(); }, 340);
@@ -258,6 +289,184 @@ function netWindow() {
 function send(channel, payload) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
 }
+
+/**
+ * Play: the splash, the launch itself, then whatever the settings say the launcher does while
+ * the game runs. `joinServer` goes straight into a server once the game is up.
+ */
+async function launchGame(id, { joinServer = null } = {}) {
+  const mode = launcher.settings.onLaunch;
+  const inst = await launcher.instances.get(id);
+  const splash = launcher.settings.splash !== false ? new LaunchSplash(inst, launcher.settings) : null;
+  const onTask = (t) => {
+    if (t.instanceId !== id || t.state !== 'running') return;
+    const progress = t.checking || !t.total ? null : t.totalBytes ? t.bytes / t.totalBytes : t.done / t.total;
+    splash?.update({ stage: t.stage, progress });
+  };
+  launcher.on('task', onTask);
+  let result;
+  try {
+    result = await launcher.launch(id, { detach: mode === 'close', joinServer });
+  } catch (err) {
+    splash?.close();
+    throw err;
+  } finally {
+    launcher.off('task', onTask);
+  }
+  splash?.follow(id, result.detached);
+  if (mode === 'close') setTimeout(() => app.quit(), splash ? 9000 : 1500);
+  else if (mode === 'hide' && win) win.hide();
+  return result;
+}
+
+const MEDIA_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.mp4': 'video/mp4', '.webm': 'video/webm' };
+
+/** Serves a gallery file, with byte ranges so clips can be scrubbed through. */
+async function mediaResponse(req) {
+  const { Readable } = require('stream');
+  const u = new URL(req.url);
+  const [kind, ...parts] = u.pathname.split('/').filter(Boolean);
+  const file = gallery?.resolve(kind, parts);
+  if (!file) return new Response('Not found', { status: 404 });
+  let st;
+  try { st = await fsp.stat(file); } catch { return new Response('Not found', { status: 404 }); }
+  if (kind === 'thumb') {
+    // small copies of screenshots, made once and kept in the cache
+    const key = require('crypto').createHash('sha1').update(`${file}:${st.mtimeMs}`).digest('hex');
+    const cached = path.join(launcher.paths.cache, 'thumbs', `${key}.jpg`);
+    let buf = await fsp.readFile(cached).catch(() => null);
+    if (!buf) {
+      const img = nativeImage.createFromPath(file);
+      if (img.isEmpty()) return new Response('Not an image', { status: 415 });
+      buf = img.resize({ width: Math.min(480, img.getSize().width), quality: 'good' }).toJPEG(82);
+      await fsp.mkdir(path.dirname(cached), { recursive: true });
+      await fsp.writeFile(cached, buf).catch(() => {});
+    }
+    return new Response(buf, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'max-age=3600' } });
+  }
+  const type = MEDIA_TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream';
+  const range = /bytes=(\d*)-(\d*)/.exec(req.headers.get('range') || '');
+  if (range && st.size) {
+    const start = range[1] ? Number(range[1]) : Math.max(0, st.size - Number(range[2] || 0));
+    const end = range[1] && range[2] ? Math.min(Number(range[2]), st.size - 1) : st.size - 1;
+    if (start > end || start >= st.size) return new Response(null, { status: 416, headers: { 'content-range': `bytes */${st.size}` } });
+    return new Response(Readable.toWeb(fs.createReadStream(file, { start, end })), {
+      status: 206,
+      headers: { 'content-type': type, 'content-length': String(end - start + 1), 'content-range': `bytes ${start}-${end}/${st.size}`, 'accept-ranges': 'bytes' },
+    });
+  }
+  return new Response(Readable.toWeb(fs.createReadStream(file)), { headers: { 'content-type': type, 'content-length': String(st.size), 'accept-ranges': 'bytes' } });
+}
+
+/** Where replay clips go: the Videos folder, or the data folder in tests. */
+function clipsFolder(root) {
+  if (process.env.NIMBUS_DATA_DIR) return path.join(root, 'clips');
+  try { return path.join(app.getPath('videos'), 'Nimbus Clips'); } catch { return path.join(root, 'clips'); }
+}
+
+// ---- mod updates: every instance is checked against Modrinth in the background, so the Home
+// page can say which ones have updates before anyone opens them
+const updatesCache = new Map(); // instance id -> updates
+
+async function checkUpdatesFor(id) {
+  const inst = await launcher.instances.get(id);
+  await modrinth.identifyContent({ paths: launcher.paths }, launcher.instances, id).catch(() => {});
+  const list = await modrinth.checkUpdates({ paths: launcher.paths }, launcher.instances, inst);
+  updatesCache.set(id, list);
+  send('content:updates', { instanceId: id, updates: list });
+  return list;
+}
+
+async function checkAllUpdates() {
+  for (const inst of await launcher.instances.list().catch(() => [])) {
+    if (launcher.running.has(inst.id) || launcher.busy.has(inst.id)) continue;
+    await checkUpdatesFor(inst.id).catch(() => {});
+  }
+}
+
+/**
+ * Replay clips: while a game runs (and the setting is on), a hidden window records the game's
+ * window into a rolling buffer; F8 in game (through the Nimbus Core bridge) saves the last
+ * seconds as an MP4 in the clips folder.
+ */
+class ClipRecorder {
+  constructor() {
+    this.win = null;
+    this.instance = null;
+    this.state = 'off';
+    this.waiting = new Map();
+    this.seq = 0;
+    ipcMain.on('clip:event', (e, msg) => {
+      if (!this.win || e.sender !== this.win.webContents) return;
+      if (msg.type === 'recording') this.state = 'recording';
+      if (msg.type === 'ended') { this.state = 'looking'; this.find().catch(() => {}); }
+      if (msg.type === 'error' && !msg.id) this.lastError = msg.error;
+      const w = msg.id && this.waiting.get(msg.id);
+      if (w) {
+        this.waiting.delete(msg.id);
+        if (msg.type === 'saved') w.resolve(msg);
+        else w.reject(new Error(msg.error || 'The clip could not be made.'));
+      }
+    });
+  }
+
+  start(inst) {
+    if (!launcher.settings.replayClips || this.win) return;
+    this.instance = inst;
+    this.state = 'looking';
+    this.lastError = null;
+    this.win = new BrowserWindow({
+      show: false, width: 320, height: 240,
+      webPreferences: { preload: path.join(__dirname, 'clip-preload.js'), contextIsolation: true, sandbox: true, backgroundThrottling: false },
+    });
+    this.win.loadFile(path.join(__dirname, 'src', 'renderer', 'clip.html'));
+    this.win.on('closed', () => { this.win = null; this.state = 'off'; });
+    this.win.webContents.on('console-message', (e) => { this.lastLog = `${e.message || ''}`.slice(0, 300); });
+    this.win.webContents.once('did-finish-load', () => this.find().catch(() => {}));
+  }
+
+  /** The game's window, found by its title ("Minecraft* 1.21.1 - Singleplayer" and the like). */
+  async find() {
+    for (let i = 0; i < 90 && this.win; i++) {
+      const sources = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 0, height: 0 } }).catch(() => []);
+      const game = sources.find((x) => /^Minecraft\*?\s+\d/.test(x.name)) || sources.find((x) => /^Minecraft\b/.test(x.name) && !/Launcher/.test(x.name));
+      if (game && this.win) {
+        const st = launcher.settings;
+        this.win.webContents.send('clip:cmd', { type: 'start', sourceId: game.id, quality: st.clipQuality || 'normal', seconds: Number(st.clipSeconds) || 30, audio: st.clipAudio !== false });
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+  }
+
+  stop() {
+    for (const w of this.waiting.values()) w.reject(new Error('The game closed.'));
+    this.waiting.clear();
+    if (this.win && !this.win.isDestroyed()) this.win.destroy();
+    this.win = null;
+    this.state = 'off';
+  }
+
+  /** Saves the last seconds. Resolves {seconds, name, file}. */
+  async save() {
+    if (!launcher.settings.replayClips) throw new Error('Turn on Replay clips in the launcher first (Settings → Replay clips), then start the game again.');
+    if (!this.win || this.state !== 'recording') throw new Error(this.lastError ? `Replay clips aren't recording: ${this.lastError}` : 'Replay clips are still starting. Try again in a few seconds.');
+    const id = String(++this.seq);
+    const result = await new Promise((resolve, reject) => {
+      this.waiting.set(id, { resolve, reject });
+      this.win.webContents.send('clip:cmd', { type: 'save', id, seconds: Number(launcher.settings.clipSeconds) || 30 });
+      setTimeout(() => { if (this.waiting.delete(id)) reject(new Error('Saving the clip took too long.')); }, 20_000);
+    });
+    await fsp.mkdir(gallery.clipsDir, { recursive: true });
+    const name = clipName(new Date(), this.instance?.name);
+    const file = path.join(gallery.clipsDir, name);
+    await fsp.writeFile(file, Buffer.from(result.data));
+    if (result.poster) await fsp.writeFile(file.replace(/\.mp4$/, '.jpg'), Buffer.from(result.poster)).catch(() => {});
+    send('clip:saved', { name, seconds: result.seconds, sound: result.sound });
+    return { seconds: result.seconds, name, file };
+  }
+}
+let clips = null;
 
 /** Every IPC call returns {ok, data} or {ok:false, error} so the renderer gets clean messages. */
 function handle(channel, fn) {
@@ -358,6 +567,16 @@ function registerIpc() {
   handle('instances:list', () => launcher.listInstances());
   handle('instances:get', (id) => launcher.instances.get(id));
   handle('instances:create', (fields) => launcher.createInstance(fields));
+  handle('import:scan', () => launcher.importScan());
+  handle('import:pick', async () => {
+    const res = await dialog.showOpenDialog(win, { title: 'Pick an instance folder (or a folder of instances)', properties: ['openDirectory'] });
+    if (res.canceled || !res.filePaths[0]) return null;
+    return launcher.importScan(res.filePaths[0]);
+  });
+  handle('import:run', async (folders) => {
+    const made = await launcher.importInstances(folders);
+    return made;
+  });
   handle('instances:update', (id, patch) => {
     const allowed = ['name', 'icon', 'memory', 'javaPath', 'jvmArgs', 'resolution', 'fullscreen', 'server'];
     const clean = Object.fromEntries(Object.entries(patch).filter(([k]) => allowed.includes(k)));
@@ -397,34 +616,50 @@ function registerIpc() {
     return launcher.addContentFiles(id, type, files);
   });
   handle('content:identify', (id) => modrinth.identifyContent({ paths: launcher.paths }, launcher.instances, id));
-  handle('content:updates', async (id) => modrinth.checkUpdates({ paths: launcher.paths }, launcher.instances, await launcher.instances.get(id)));
-  handle('content:update', (id, items) => launcher.updateContent(id, items));
+  handle('content:updates', (id) => checkUpdatesFor(id));
+  handle('content:updatesKnown', () => Object.fromEntries(updatesCache));
+  handle('content:update', async (id, items) => {
+    const done = await launcher.updateContent(id, items);
+    checkUpdatesFor(id).catch(() => {});
+    return done;
+  });
 
-  handle('game:launch', async (id) => {
-    const mode = launcher.settings.onLaunch;
-    const inst = await launcher.instances.get(id);
-    const splash = launcher.settings.splash !== false ? new LaunchSplash(inst, launcher.settings) : null;
-    const onTask = (t) => {
-      if (t.instanceId !== id || t.state !== 'running') return;
-      const progress = t.checking || !t.total ? null : t.totalBytes ? t.bytes / t.totalBytes : t.done / t.total;
-      splash?.update({ stage: t.stage, progress });
-    };
-    launcher.on('task', onTask);
-    let result;
-    try {
-      result = await launcher.launch(id, { detach: mode === 'close' });
-    } catch (err) {
-      splash?.close();
-      throw err;
-    } finally {
-      launcher.off('task', onTask);
+  handle('game:launch', (id) => launchGame(id));
+  handle('gallery:list', async () => ({ screenshots: await gallery.screenshots(), clips: await gallery.clips(), clipsDir: gallery.clipsDir }));
+  const galleryFile = (file) => {
+    if (typeof file !== 'string' || !gallery.owns(file)) throw new Error('That is not in the gallery.');
+    return file;
+  };
+  handle('gallery:copy', async (file) => {
+    const img = nativeImage.createFromPath(galleryFile(file));
+    if (img.isEmpty()) throw new Error('Could not read that picture.');
+    // Electron 44's clipboard is the async, web-style one
+    await clipboard.write([new ClipboardItem({ 'image/png': new Blob([img.toPNG()], { type: 'image/png' }) })]);
+  });
+  handle('gallery:reveal', (file) => shell.showItemInFolder(galleryFile(file)));
+  handle('gallery:remove', async (file) => {
+    for (const f of gallery.related(galleryFile(file))) {
+      if (fs.existsSync(f)) await shell.trashItem(f).catch(() => fsp.rm(f, { force: true }));
     }
-    splash?.follow(id, result.detached);
-    if (mode === 'close') setTimeout(() => app.quit(), splash ? 9000 : 1500);
-    else if (mode === 'hide' && win) win.hide();
-    return result;
+  });
+  handle('gallery:background', (file) => useBackground(galleryFile(file)));
+  handle('gallery:openFolder', async (kind) => {
+    const dir = kind === 'clips' ? gallery.clipsDir : launcher.paths.instances;
+    await fsp.mkdir(dir, { recursive: true });
+    const err = await shell.openPath(dir);
+    if (err) throw new Error(err);
+  });
+  handle('servers:list', () => servers.list());
+  handle('servers:ping', (address) => serverPing(address));
+  handle('servers:add', (entry) => servers.addFavourite(entry));
+  handle('servers:remove', (address) => servers.removeFavourite(address));
+  handle('servers:play', (id, address) => {
+    parseAddress(address);
+    return launchGame(id, { joinServer: address });
   });
   handle('game:kill', (id) => launcher.kill(id));
+  handle('doctor:examine', (id) => launcher.examine(id));
+  handle('doctor:fix', (id, fix) => launcher.applyFix(id, fix));
   handle('game:log', (id) => launcher.getLog(id));
   handle('game:openCrash', async (file) => {
     if (!file.startsWith(launcher.paths.instances)) throw new Error('Not a crash report');
@@ -621,6 +856,12 @@ app.whenReady().then(async () => {
   launcher = await new Launcher({ root, crypto: sealer, builtinDir }).init();
   launcher.on('task', (t) => send('task', t));
   launcher.on('game-log', (e) => send('game:log', e));
+  launcher.on('doctor', (e) => {
+    // the game's own error window is up: bring the launcher forward with the diagnosis
+    if (win && !win.isVisible()) win.show();
+    win?.focus();
+    send('game:doctor', e);
+  });
   launcher.on('boost-step', (e) => send('boost:step', e));
   launcher.on('game-state', (e) => {
     send('game:state', e);
@@ -648,6 +889,11 @@ app.whenReady().then(async () => {
   lan.on('state', (st) => send('lan:state', st));
   if (process.env.NIMBUS_DATA_DIR) global.nimbusLan = lan; // tests reach in here
   await lan.startBridge().catch(() => {});
+  servers = new Servers(launcher);
+  setTimeout(() => checkAllUpdates(), 25_000).unref?.();
+  setInterval(() => checkAllUpdates(), 6 * 3600_000).unref?.();
+  gallery = new Gallery(launcher, clipsFolder(root));
+  protocol.handle('nimbus-media', (req) => mediaResponse(req).catch(() => new Response('Error', { status: 500 })));
   cosmetics = new Cosmetics({ launcher, friends });
   cosmetics.on('state', (st) => send('cosmetics:state', st));
   cosmetics.on('coins', (events) => send('cosmetics:coins', events));
@@ -660,6 +906,16 @@ app.whenReady().then(async () => {
     signedAs = now;
   });
   launcher.on('game-state', () => cosmetics.gameState(launcher.running.size > 0));
+  clips = new ClipRecorder();
+  if (process.env.NIMBUS_DATA_DIR) global.nimbusClips = clips; // tests look in here
+  lan.onClip = () => clips.save();
+  launcher.on('game-state', (e) => {
+    if (e.running) {
+      const r = launcher.running.get(e.instanceId);
+      clips.start(r?.instance || { name: null });
+    } else if (launcher.running.size === 0) clips.stop();
+  });
+  handle('clips:state', () => ({ state: clips.state, error: clips.lastError || null }));
   friends.apiBase().then((b) => { launcher.apiBase = b; }).catch(() => {});
   await syncCosmeticsSetting();
   discord = new DiscordStatus({

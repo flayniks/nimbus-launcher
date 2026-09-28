@@ -3,6 +3,7 @@ import { api, store } from '../store.js';
 import { go, play } from '../router.js';
 import { openNewInstance } from '../newInstance.js';
 import { openProject } from '../project.js';
+import { openImport } from '../importDialog.js';
 
 function playButton(inst, { big = false } = {}) {
   const running = store.running.has(inst.id);
@@ -36,6 +37,15 @@ function syncCardTask(card, inst) {
   }
 }
 
+/** "3 updates": mods, packs or shaders in this instance that have a newer build on Modrinth. */
+function updatesTag(inst) {
+  const n = store.modUpdates.get(inst.id)?.length || 0;
+  const tag = h('span.tag.upd', { title: 'Newer versions on Modrinth. Click to update.', onclick: (e) => { e.stopPropagation(); go('instance', { id: inst.id, tab: 'content', updates: true }); } }, icon('refresh'), `${n} update${n === 1 ? '' : 's'}`);
+  tag.hidden = !n;
+  tag.dataset.updates = inst.id;
+  return tag;
+}
+
 function instanceCard(inst) {
   const card = h('div.inst-card', { dataset: { id: inst.id }, onclick: () => go('instance', { id: inst.id }) },
     h('div.top', instanceIcon(inst),
@@ -45,7 +55,8 @@ function instanceCard(inst) {
     h('div.meta',
       h('span.tag', inst.mcVersion),
       h('span.tag.accent', LOADER_NAMES[inst.loader] || inst.loader),
-      inst.boost ? h('span.tag.good', { icon: 'zap' }, 'Boosted') : null),
+      inst.boost ? h('span.tag.good', { icon: 'zap' }, 'Boosted') : null,
+      updatesTag(inst)),
     h('div.task-slot'),
     playButton(inst));
   syncCardTask(card, inst);
@@ -61,6 +72,7 @@ export function render(page) {
   page.append(
     heroSlot,
     h('h2.section', 'Your instances', countEl, h('span', { style: { flex: 1 } }),
+      h('button.btn.sm.ghost', { icon: 'download', title: 'Bring instances over from CurseForge, Prism, MultiMC, ATLauncher or the Modrinth App', onclick: () => openImport() }, 'Import from other launchers'),
       h('button.btn.sm.ghost', { icon: 'upload', onclick: importPack }, 'Import .mrpack'),
       h('button.btn.sm', { icon: 'plus', onclick: () => openNewInstance() }, 'New instance')),
     grid,
@@ -159,6 +171,12 @@ export function render(page) {
   loadDiscover();
   const offs = [
     store.on('instances', () => { drawHero(); drawGrid(); }),
+    store.on('mod-updates', () => {
+      for (const inst of store.instances) {
+        const tag = grid.querySelector(`[data-updates="${CSS.escape(inst.id)}"]`);
+        if (tag) tag.replaceWith(updatesTag(inst));
+      }
+    }),
     store.on('task', onTask),
     store.on('launching', refreshHeroButton),
   ];

@@ -140,6 +140,12 @@ export function render(page) {
       card(
         row('When the game starts', 'Hiding the launcher frees memory and GPU time for Minecraft.'),
         h('div.setting', seg('onLaunch', [['hide', 'Hide launcher'], ['keep', 'Keep open'], ['close', 'Close launcher']], 'hide'))),
+      h('div.group-title', 'Replay clips'),
+      card(
+        row('Replay clips', 'Nimbus keeps recording the last few seconds of your game. Press F8 in game to save them as a video in Gallery → Clips. Uses a little extra graphics power while you play.', onOff('replayClips', false)),
+        row('Clip length', 'How much of the game each clip keeps.', seg('clipSeconds', [[15, '15 s'], [30, '30 s'], [60, '60 s']], 30, Number)),
+        row('Quality', 'Higher quality uses more of your computer while you play.', seg('clipQuality', [['normal', '720p · 30 fps'], ['high', '1080p · 60 fps']], 'normal')),
+        ...(api.platform === 'win32' ? [row('Record game sound', 'Records what your computer plays (Windows only).', onOff('clipAudio'))] : [])),
       h('div.group-title', 'Cosmetics'),
       card(
         row('Show other players’ cosmetics', 'Hats, pets, wings and auras other Nimbus players wear, in Fabric and Quilt games. Yours always show.', onOff('showOtherCosmetics'))),

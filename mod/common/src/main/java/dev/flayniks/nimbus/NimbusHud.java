@@ -510,6 +510,7 @@ public final class NimbusHud {
 
 		Tweaks.frame(mc);
 		if (mc.level != null && NimbusConfig.on("hud.ping", false)) Ping.tick(mc);
+		if (Compat.screen() == null) Clips.tick();
 	}
 
 	private static boolean mouse(int button) {

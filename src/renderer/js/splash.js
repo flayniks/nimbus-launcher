@@ -74,7 +74,33 @@
     if (u.stage) setStage(u.stage);
     if ('progress' in u) setProgress(u.progress);
     if (u.leaving) $('card').classList.add('leaving');
+    if (u.ready) gameReady();
   });
 
-  document.addEventListener('click', () => window.splash.dismiss());
+  // Cloud Hop, for the wait. While it's up, clicks hop instead of hiding the splash.
+  let playing = false;
+  let readyTimer = null;
+
+  function play() {
+    if (playing) return;
+    playing = true;
+    document.body.classList.add('playing');
+    window.splash.playing();
+    window.cloudHop.start($('game'));
+  }
+
+  /** Minecraft is up: let a run in progress finish (briefly), then get out of the way. */
+  function gameReady() {
+    if (readyTimer) return;
+    document.body.classList.add('ready');
+    const leave = () => { clearInterval(readyTimer); window.cloudHop.stop(); window.splash.dismiss(); };
+    const since = Date.now();
+    readyTimer = setInterval(() => {
+      if (!window.cloudHop.running() || Date.now() - since > 15000) leave();
+    }, 250);
+  }
+
+  $('play').addEventListener('click', (e) => { e.stopPropagation(); play(); });
+  $('hide').addEventListener('click', (e) => { e.stopPropagation(); window.cloudHop.stop(); window.splash.dismiss(); });
+  document.addEventListener('click', () => { if (!playing) window.splash.dismiss(); });
 })();

@@ -19,7 +19,14 @@ A fast, good-looking launcher for **Minecraft: Java Edition** with licensed (Mic
 - **Nimbus loading screen.** Hit Play and an animated Nimbus splash follows the launch. In Fabric and Quilt instances the game itself then loads on the Nimbus screen instead of Mojang's red one, through the built-in **Nimbus Core** mod.
 - **Skins & capes.** Search thousands of skins or copy any player's skin by name, try them on a 3D player, keep a wardrobe and switch capes, right in the launcher. In Fabric and Quilt games you can do all of it from the title screen or the pause menu too.
 - **Updates itself.** Every time it opens, Nimbus checks for a new version, downloads it and restarts into it (it waits while you play or download, and *Later* keeps it for the next close). Settings has a *Check now* button too.
-- Live game console, crash detection, play time, one-click Repair, instance duplication, update checks for installed content, and an auto-join server option.
+- **Servers.** Your favourite servers, the ones in your games' server lists and popular ones, pinged live with their message, players and ping. *Play* starts the right instance and joins.
+- **Gallery and replay clips.** Every instance's screenshots in one place, to copy, use as your background or delete. Turn on *Replay clips* and **F8** in game saves the last 15–60 seconds as a video.
+- **Crash doctor.** When a game crashes (or a mod loader refuses to start), Nimbus says why in plain words and offers the fix: install the missing mod, turn off the broken one, give Java more memory…
+- **One-click mod updates.** Home shows which instances have updates; *Update all* does them in one go.
+- **Import instances** from CurseForge, Prism Launcher, MultiMC, ATLauncher and the Modrinth App, with their mods, worlds and settings.
+- **Nimbus badges.** Other Nimbus players get a little ☁ by their name, above their head and in the Tab list.
+- **Cloud Hop.** A small game on the launch splash to play while Minecraft starts.
+- Live game console, play time, one-click Repair, instance duplication and an auto-join server option.
 
 ![Home](docs/home.png)
 
@@ -167,6 +174,44 @@ Commons are free. Everything else is unlocked with **Nimbus coins** (rare 150, e
 
 Nimbus Core counts what you do in any Fabric or Quilt game: blocks mined, ores, logs and diamonds, blocks placed, mobs beaten, critical hits, distance walked, sprinted, swum, flown and ridden, food eaten, experience and levels, fish caught, nights slept, time played, time with other players and time in the Nether and the End. Creative mode doesn't count for mining, placing or fighting. It writes the day's totals to a file; while the game runs the launcher sends them to the service every minute, and the service pays out, so balances can't be edited on your computer (and each day's totals are capped at what a person could really do). In game, a *Daily tasks* box on the HUD (on by default, in *Nimbus Features → HUD*) shows how far along you are, and a card drops in at the top of the screen when you finish one. The coins arrive in the launcher with a toast. The *Earn coins* tab on the Cosmetics page lists today's tasks, what else pays and every achievement.
 
+## Servers
+
+**Servers** in the sidebar pings every server as you look: its message of the day (with colours), players online (and some names), version and ping. Your favourites come first (*Add server*), then the servers already in your instances' in-game lists, then a few popular ones. *Play* picks an instance that fits the server's version (or the one you choose), starts it and joins straight away. Pings use Minecraft's own Server List Ping, with SRV records, from your computer.
+
+## Gallery and replay clips
+
+**Gallery** shows the screenshots from every instance, newest first. Click one to see it big, then copy it (to paste into Discord, say), use it as the launcher background, show it in its folder or send it to the recycle bin.
+
+**Replay clips** (*Settings → General → Replay clips*, off by default) keep recording the last 15, 30 or 60 seconds of your game while you play. Press **F8** in game and they're saved as an MP4 in *Gallery → Clips*; Nimbus Core says "Clip saved" in the corner. Nothing is written to disk until you press F8. Clips are 720p at 30 fps or 1080p at 60 fps, encoded on the graphics card where it can (H.264, or VP9 as a fallback), and on Windows they can record the game's sound. Clips are kept in *Videos/Nimbus Clips*.
+
+## Crash doctor
+
+When a game crashes, Nimbus reads the crash report, the log and any Java crash file, and explains what went wrong with buttons that fix it:
+
+- a missing mod or library (*Install Fabric API*), or a mod that needs a newer version of another one: install or update it from Modrinth
+- two mods that don't get along, a mod for another Minecraft version or a mod that fails to load (named in the report, found in its stack trace, or suspected by Fabric/Forge): turn it off
+- out of memory: give Java more
+- the wrong Java: switch back to the automatic one
+- graphics driver crashes: turn shaders off, or update the driver
+- a broken config file: reset it (the old one is kept, renamed to `.broken-…`)
+- damaged game files: Repair
+
+Fabric and Forge sometimes show their own error window instead of closing; the doctor spots those in the log and opens straight away. The *Crash doctor* button on every instance looks at the last crash again.
+
+## Mod updates and importing
+
+Nimbus checks installed Modrinth mods, packs and shaders for updates in the background (by their file hashes, so it works for files you added yourself too). Home puts an *N updates* tag on instances that have them, and the instance page lists them with *Update* and *Update all*. The old files are replaced.
+
+*Import* on Home finds the instances of CurseForge, Prism Launcher, MultiMC, ATLauncher and the Modrinth App on your computer (or in a folder you pick), shows their version, loader, mods and worlds, and copies the ones you tick into Nimbus with the same Minecraft version and loader. The originals are left alone.
+
+## Nimbus badges
+
+In Fabric and Quilt games, Nimbus Core puts a little violet ☁ before the name of every player who uses Nimbus, above their head and in the Tab list, on any server. It knows who they are from the same service that shares cosmetics. *Nimbus Features → Utilities → Nimbus badges* turns them off.
+
+## Cloud Hop
+
+Hit Play and the launch splash has a *Play Cloud Hop while you wait* button: hop the Nimbus cube between block pillars with Space or a click, and grab coins for bonus points. Your best score is kept. When Minecraft is ready, your current run finishes (or 15 seconds pass) and the splash gets out of the way.
+
 ## Discord status
 
 With the Discord app open, your Discord profile shows what you're doing: *In the launcher*, *In the menus*, *Playing singleplayer*, *Hosting a world on Nimbus LAN*, *Playing on mc.hypixel.net* or *In Alex's world on Nimbus LAN*, with the Minecraft version, the loader and how long you've played. Server names are shown, but never IP addresses or your own computer. Both are switches in *Settings → General → Discord*. The launcher talks to the Discord app on your computer directly (its local socket), and Nimbus Core tells the launcher where you are in the game.
@@ -214,6 +259,10 @@ src/core/                    everything that is not UI (plain Node, testable wit
   auth.js / accounts.js      Microsoft → Xbox Live → Minecraft sign-in, encrypted token storage
   modrinth.js                search, dependency resolution, .mrpack, update checks
   boost.js                   the FPS Boost
+  servers.js                 Server List Ping, servers.dat, favourites
+  gallery.js                 screenshots and replay clips (served over nimbus-media://)
+  crashdoctor.js             reads crash reports and logs, suggests fixes
+  importer.js                instances from CurseForge, Prism, MultiMC, ATLauncher, Modrinth App
 src/renderer/                the UI: vanilla JS modules, no framework (splash.html is the launch splash)
 mod/                         Nimbus Core, the built-in Fabric mod (Gradle, see mod/README.md)
 resources/mods/              the built Nimbus Core jars the launcher ships
@@ -243,6 +292,8 @@ Nimbus Core was checked in real games on the virtual display on Fabric 1.20.1, 1
 The skins page was tested against stand-ins for Mojang's skin service, its name lookup and the MineSkin gallery (`test/mock-services.js`): search by player name and by keyword, save a result, preview, wear with slim arms, switch capes and hide the cape. The search was also run against the real gallery and Mojang. The in-game menu was tested the same way on Fabric 1.20.1, 1.21.1, 1.21.11 and 26.3: from the title screen and from the pause menu in a world, typing a player's name, wearing their skin, searching a keyword and saving a result. Every game method the menu calls was checked to exist in each release from 1.20 to 26.3.
 
 Nimbus Features was tested in real games on Fabric 1.20.1, 1.21.1, 1.21.11 and 26.3: opening the menu from the pause menu, the title screen and Right Shift, switching HUD boxes on, dragging and resizing them in the editor, zoom and the inventory watermark. The in-game animation options were checked on 1.21.1 (Mojang's loading screen, no badge, flip) and on 26.1.2 and 26.3 (still logo, no particles, bounce and pulse at start, splash on an F3+T resource reload, which now fades straight back into the world). The inventory watermark was checked on 1.21.1 and 26.1.2. Cosmetics were checked in real games on Fabric 1.20.1, 1.21.1, 1.21.5, 1.21.11 and 26.3 (each era of Minecraft's entity drawing), day and night, and with two Nimbus players on one server, each seeing the other's cosmetics fetched from a local copy of the friends service. All of them were then looked at in game from behind and in front, with armour and crouching, which is how the wings that hung down over your arms, the rings that flipped through your body, the flames sunk into the ground and the pets bumping into your head were found and fixed. Nimbus coins were tested with the real launcher and a local copy of the service: on a server in 1.21.1, walking, mining, placing, a zombie, experience and eating were each counted once (teleports and the saturation effect not at all), the daily task card and the HUD box showed up, and the totals reached the service; walking, mining and experience were also counted on 1.20.1 and 26.3. The Ping box and the Discord status were checked with the real launcher against a local vanilla server behind a proxy that holds every packet for 50 ms each way: the box read 104 ms (it used to say 0), and a stand-in Discord app received *In the launcher*, *In the menus*, *Playing singleplayer*, *Hosting a world on Nimbus LAN*, *Playing on play.nimbus.test* and a cleared status when the launcher quit. Leaving a world you opened to Nimbus LAN now stops hosting, and the world comes back normal when you rejoin. Crazy animations were checked in real games on Fabric 1.20.1, 1.21.1, 1.21.11 and 26.3 (menu transitions, cursor trail, glowing buttons, level up, combos, damage, heal, pickups, hotbar pop, landing, speed lines and the heartbeat), and switched off it draws nothing. The launcher's look (themes, backgrounds, your own picture and colours, shapes, size), the animation settings, the player counter (against a stand-in counter) and the *Add file* buttons were run through in the real Electron app.
+
+The 1.8.0 features were run in the real launcher. Servers pinged a local vanilla 1.21.1 server (message, players, version, ping). The gallery showed an instance's screenshots, opened one big and copied it to the clipboard. The crash doctor was given a Fabric instance missing Fabric API: it opened while Fabric's own error window was still up, named the problem, installed Fabric API from Modrinth, and the game then started. Mod updates found an old mod, tagged the instance on Home and updated it. Import read made-up CurseForge, Prism, MultiMC, ATLauncher and Modrinth App instances (`test/unit.js`) and imported a Prism one in the app. Badges were checked with two Nimbus players on one server in 1.21.1, above heads and in the Tab list, and the methods they hook were checked to exist in every release from 1.20 to 26.3. Replay clips were recorded from a real game: F8 saved a 1280×720 MP4 with a poster, the game said "Clip saved", and the clip played in the Gallery. Cloud Hop was played on the real launch splash with the keyboard, and the splash left once Minecraft's window was up.
 
 The updater was tested by having a 1.0.0 build read a local copy of the release feed, find 1.1.0, download it and verify its checksum. The final "install and restart" step only runs on Windows.
 

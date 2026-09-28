@@ -11,7 +11,7 @@ async function call(channel, ...args) {
   return res.data;
 }
 
-const EVENTS = new Set(['task', 'game:log', 'game:state', 'boost:step', 'win:state', 'update:state', 'friends:state', 'friends:message', 'lan:state', 'cosmetics:state', 'cosmetics:coins']);
+const EVENTS = new Set(['task', 'game:log', 'game:state', 'boost:step', 'win:state', 'update:state', 'friends:state', 'friends:message', 'lan:state', 'cosmetics:state', 'cosmetics:coins', 'game:doctor', 'content:updates', 'clip:saved']);
 
 contextBridge.exposeInMainWorld('nimbus', {
   platform: process.platform,
@@ -57,6 +57,11 @@ contextBridge.exposeInMainWorld('nimbus', {
     open: (id, sub) => call('instances:open', id, sub),
     size: (id) => call('instances:size', id),
   },
+  importer: {
+    scan: () => call('import:scan'),
+    pick: () => call('import:pick'),
+    run: (folders) => call('import:run', folders),
+  },
   content: {
     list: (id) => call('content:list', id),
     toggle: (id, rel, enabled) => call('content:toggle', id, rel, enabled),
@@ -64,13 +69,33 @@ contextBridge.exposeInMainWorld('nimbus', {
     addFiles: (id, type, paths) => call('content:addFiles', id, type, paths),
     identify: (id) => call('content:identify', id),
     updates: (id) => call('content:updates', id),
+    updatesKnown: () => call('content:updatesKnown'),
     update: (id, items) => call('content:update', id, items),
+  },
+  gallery: {
+    list: () => call('gallery:list'),
+    copy: (file) => call('gallery:copy', file),
+    reveal: (file) => call('gallery:reveal', file),
+    remove: (file) => call('gallery:remove', file),
+    background: (file) => call('gallery:background', file),
+    openFolder: (kind) => call('gallery:openFolder', kind),
+  },
+  servers: {
+    list: () => call('servers:list'),
+    ping: (address) => call('servers:ping', address),
+    add: (entry) => call('servers:add', entry),
+    remove: (address) => call('servers:remove', address),
+    play: (id, address) => call('servers:play', id, address),
   },
   game: {
     launch: (id) => call('game:launch', id),
     kill: (id) => call('game:kill', id),
     log: (id) => call('game:log', id),
     openCrash: (file) => call('game:openCrash', file),
+  },
+  doctor: {
+    examine: (id) => call('doctor:examine', id),
+    fix: (id, fix) => call('doctor:fix', id, fix),
   },
   accounts: {
     list: () => call('accounts:list'),

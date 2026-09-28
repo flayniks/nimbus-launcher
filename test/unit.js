@@ -865,3 +865,143 @@ test('cosmetics: what you wear is saved, written for the game and shared; locked
   c.stop();
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('crash doctor: reads real crash signs and names the mod to blame', async () => {
+  const { diagnose, scanMods } = require('../src/core/crashdoctor');
+  const AdmZip = require('adm-zip');
+  const fabric = { loader: 'fabric', mcVersion: '1.21.1', memory: { max: 3072 } };
+  const mod = (name, ids, pk, extra = {}) => ({ name, ids, packages: pk, rel: `mods/${ids[0]}.jar`, file: `${ids[0]}.jar`, loader: 'fabric', time: 1, ...extra });
+  const modmenu = mod('Mod Menu', ['modmenu'], ['com/terraformersmc/modmenu']);
+  const sodium = mod('Sodium', ['sodium'], ['net/caffeinemc/mods']);
+  const bad = mod('Bad Mod', ['badmod'], ['com/example/badmod']);
+
+  // Fabric 0.15+: a missing dependency, with what to install
+  let d = diagnose({ instance: fabric, mods: [modmenu], code: 1, log: [
+    '[main/ERROR]: Incompatible mods found!',
+    'net.fabricmc.loader.impl.FormattedException: Some of your mods are incompatible with the game or each other!',
+    'A potential solution has been determined, this may resolve your problem:',
+    '\t - Install fabric-api, any version.',
+    'More details:',
+    "\t - Mod 'Mod Menu' (modmenu) 11.0.1 requires any version of fabric-api, which is missing!",
+  ] });
+  assert.equal(d.kind, 'missing-dependency');
+  assert.match(d.title, /Mod Menu needs Fabric API/);
+  assert.deepEqual(d.fixes[0], { kind: 'install', project: 'fabric-api', label: 'Add Fabric API' });
+
+  // made for another Minecraft version
+  d = diagnose({ instance: fabric, mods: [sodium], code: 1, log: ["\t - Mod 'Sodium' (sodium) 0.5.8+mc1.20.4 requires version 1.20.4 of minecraft, but only the wrong version is present: 1.21.1!"] });
+  assert.equal(d.kind, 'wrong-version');
+  assert.equal(d.culprits[0].name, 'Sodium');
+  assert.ok(d.fixes.some((f) => f.kind === 'disable' && f.rel === 'mods/sodium.jar'));
+
+  // a mixin that doesn't apply
+  d = diagnose({ instance: fabric, mods: [bad, sodium], code: 1, log: ['Mixin apply for mod badmod failed badmod.mixins.json:TitleMixin from mod badmod -> net.minecraft.class_442: org.spongepowered.asm.mixin.injection.throwables.InvalidInjectionException'] });
+  assert.equal(d.kind, 'mixin');
+  assert.equal(d.culprits[0].name, 'Bad Mod');
+
+  // the stack trace points into a mod
+  d = diagnose({ instance: fabric, mods: [bad, sodium], code: -1, report: [
+    '---- Minecraft Crash Report ----',
+    'Description: Ticking entity',
+    '',
+    'java.lang.NullPointerException: Cannot invoke "Object.toString()"',
+    '\tat com.example.badmod.feature.Thing.tick(Thing.java:42)',
+    '\tat net.minecraft.class_1297.method_5773(class_1297.java:500)',
+  ].join('\n') });
+  assert.equal(d.kind, 'suspect');
+  assert.match(d.title, /Bad Mod crashed the game/);
+  assert.match(d.evidence, /Ticking entity/);
+
+  // out of memory
+  d = diagnose({ instance: fabric, mods: [], code: 1, log: ['Exception in thread "Render thread" java.lang.OutOfMemoryError: Java heap space'], totalMB: 16384 });
+  assert.equal(d.kind, 'memory');
+  assert.deepEqual(d.fixes[0], { kind: 'memory', mb: 5120, label: 'Give it 5 GB' });
+
+  // the graphics driver, from the JVM's crash file
+  d = diagnose({ instance: fabric, mods: [], code: -1073741819, hsErr: '# Problematic frame:\n# C  [nvoglv64.dll+0xd9f1b2]' });
+  assert.equal(d.kind, 'graphics');
+  assert.match(d.fixes[0].label, /NVIDIA/);
+
+  // Forge's list of missing dependencies
+  d = diagnose({ instance: { loader: 'forge', mcVersion: '1.20.1' }, mods: [], code: 1, log: ["Mod ID: 'geckolib', Requested by: 'cobblemon', Expected range: '[4.4,)', Actual version: '[MISSING]'"] });
+  assert.equal(d.kind, 'missing-dependency');
+  assert.equal(d.fixes[0].project, 'geckolib');
+
+  // a class that isn't there: a library mod is missing
+  d = diagnose({ instance: fabric, mods: [modmenu], code: 1, log: ['java.lang.NoClassDefFoundError: me/shedaniel/clothconfig2/api/ConfigBuilder'] });
+  assert.equal(d.kind, 'missing-library');
+  assert.equal(d.fixes[0].project, 'cloth-config');
+
+  // nothing to go on
+  assert.equal(diagnose({ instance: fabric, mods: [], code: 0, log: [] }), null);
+  d = diagnose({ instance: fabric, mods: [bad], code: 1, log: ['something odd'] });
+  assert.equal(d.kind, 'unknown');
+
+  // scanning the mods folder: the same mod twice, and a Forge mod in a Fabric instance
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nimbus-doctor-'));
+  fs.mkdirSync(path.join(dir, 'mods'));
+  const jar = (file, entries, time) => {
+    const z = new AdmZip();
+    for (const [n, t] of Object.entries(entries)) z.addFile(n, Buffer.from(t));
+    z.writeZip(path.join(dir, 'mods', file));
+    fs.utimesSync(path.join(dir, 'mods', file), time, time);
+  };
+  jar('jei-1.0.jar', { 'META-INF/mods.toml': 'modLoader="javafml"\n[[mods]]\nmodId="jei"\ndisplayName="Just Enough Items"', 'mezz/jei/api/A.class': 'x' }, 1000);
+  jar('zoom-1.0.jar', { 'fabric.mod.json': '{"id":"zoomify","name":"Zoomify","version":"1.0"}', 'dev/isxander/zoomify/Z.class': 'x' }, 1000);
+  jar('zoom-2.0.jar', { 'fabric.mod.json': '{"id":"zoomify","name":"Zoomify","version":"2.0"}', 'dev/isxander/zoomify/Z.class': 'x' }, 2000);
+  const mods = await scanMods(dir);
+  assert.equal(mods.length, 3);
+  assert.deepEqual(mods.find((m) => m.file === 'jei-1.0.jar').ids, ['jei']);
+  d = diagnose({ instance: fabric, mods, code: 1, log: [] });
+  assert.equal(d.kind, 'wrong-loader');
+  assert.match(d.title, /Just Enough Items is made for Forge/);
+  assert.ok(d.fixes.some((f) => f.rel === 'mods/zoom-1.0.jar'), 'the older duplicate goes too');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('import: reads CurseForge, Prism/MultiMC, ATLauncher and Modrinth App instances and copies the game folder', async () => {
+  const { scanFolder, copyGame, readInstance } = require('../src/core/importer');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'nimbus-import-'));
+  const put = (rel, text) => { fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true }); fs.writeFileSync(path.join(root, rel), text); };
+  // CurseForge: Forge
+  put('cf/All the Mods/minecraftinstance.json', JSON.stringify({ name: 'All the Mods', gameVersion: '1.20.1', baseModLoader: { name: 'forge-47.2.0', minecraftVersion: '1.20.1', forgeVersion: '47.2.0' } }));
+  put('cf/All the Mods/mods/a.jar', 'x');
+  put('cf/All the Mods/mods/b.jar', 'x');
+  put('cf/All the Mods/saves/World/level.dat', 'x');
+  put('cf/All the Mods/logs/latest.log', 'x');
+  // CurseForge: Fabric
+  put('cf/Fabby/minecraftinstance.json', JSON.stringify({ name: 'Fabby', gameVersion: '1.21.1', baseModLoader: { name: 'fabric-0.16.5-1.21.1', minecraftVersion: '1.21.1' } }));
+  // Prism: NeoForge, game in .minecraft
+  put('prism/Neo/instance.cfg', 'InstanceType=OneSix\nname=Neo Pack\n');
+  put('prism/Neo/mmc-pack.json', JSON.stringify({ components: [{ uid: 'net.minecraft', version: '1.21.1' }, { uid: 'net.neoforged', version: '21.1.65' }] }));
+  put('prism/Neo/.minecraft/options.txt', 'fov:0.5');
+  put('prism/Neo/.minecraft/config/x.toml', 'a=1');
+  // ATLauncher: Quilt
+  put('at/Quilty/instance.json', JSON.stringify({ id: '1.20.4', launcher: { name: 'Quilty', loaderVersion: { type: 'Quilt', version: '0.26.0' } } }));
+  // the Modrinth App's old profile.json
+  put('mr/Plain/profile.json', JSON.stringify({ metadata: { name: 'Plain', game_version: '1.21', loader: 'vanilla' } }));
+
+  const cf = await scanFolder(path.join(root, 'cf'), 'CurseForge');
+  const atm = cf.find((x) => x.name === 'All the Mods');
+  assert.deepEqual([atm.mcVersion, atm.loader, atm.loaderVersion, atm.mods, atm.worlds], ['1.20.1', 'forge', '1.20.1-47.2.0', 2, 1]);
+  const fab = cf.find((x) => x.name === 'Fabby');
+  assert.deepEqual([fab.loader, fab.loaderVersion], ['fabric', '0.16.5']);
+  const [neo] = await scanFolder(path.join(root, 'prism'), 'Prism Launcher');
+  assert.deepEqual([neo.name, neo.mcVersion, neo.loader, neo.loaderVersion], ['Neo Pack', '1.21.1', 'neoforge', '21.1.65']);
+  assert.equal(neo.gameDir, path.join(root, 'prism', 'Neo', '.minecraft'));
+  const [q] = await scanFolder(path.join(root, 'at'));
+  assert.deepEqual([q.loader, q.loaderVersion, q.mcVersion], ['quilt', '0.26.0', '1.20.4']);
+  assert.equal((await readInstance(path.join(root, 'mr', 'Plain'))).loader, 'vanilla');
+  // a single instance folder works too
+  assert.equal((await scanFolder(path.join(root, 'prism', 'Neo'))).length, 1);
+  assert.equal(await readInstance(path.join(root, 'cf')), null);
+
+  // copying leaves out the launcher's bookkeeping and logs
+  const dest = path.join(root, 'out');
+  await copyGame(atm.gameDir, dest);
+  assert.ok(fs.existsSync(path.join(dest, 'mods', 'a.jar')));
+  assert.ok(fs.existsSync(path.join(dest, 'saves', 'World', 'level.dat')));
+  assert.ok(!fs.existsSync(path.join(dest, 'logs')));
+  assert.ok(!fs.existsSync(path.join(dest, 'minecraftinstance.json')));
+  fs.rmSync(root, { recursive: true, force: true });
+});

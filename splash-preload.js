@@ -8,4 +8,8 @@ contextBridge.exposeInMainWorld('splash', {
   dismiss() {
     ipcRenderer.send('splash:dismiss');
   },
+  /** The minigame started: the window takes keyboard focus so Space works. */
+  playing() {
+    ipcRenderer.send('splash:play');
+  },
 });

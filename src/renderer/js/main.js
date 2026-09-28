@@ -10,10 +10,13 @@ import * as instance from './pages/instance.js';
 import * as skins from './pages/skins.js';
 import * as friendsPage from './pages/friends.js';
 import * as cosmeticsPage from './pages/cosmetics.js';
+import * as serversPage from './pages/servers.js';
+import * as galleryPage from './pages/gallery.js';
 import { head as skinHead } from './skinart.js';
 import { presencePill } from './look.js';
+import { showDoctor } from './doctor.js';
 
-registerPages({ home, browse, boost, accounts, settings, instance, skins, friends: friendsPage, cosmetics: cosmeticsPage });
+registerPages({ home, browse, boost, accounts, settings, instance, skins, friends: friendsPage, cosmetics: cosmeticsPage, servers: serversPage, gallery: galleryPage });
 
 const NAV = [
   { page: 'home', icon: 'home', label: 'Home' },
@@ -21,6 +24,8 @@ const NAV = [
   { page: 'boost', icon: 'zap', label: 'FPS Boost' },
   { page: 'skins', icon: 'shirt', label: 'Skins & capes' },
   { page: 'cosmetics', icon: 'sparkles', label: 'Cosmetics' },
+  { page: 'servers', icon: 'server', label: 'Servers' },
+  { page: 'gallery', icon: 'image', label: 'Gallery' },
   { page: 'friends', icon: 'users', label: 'Friends' },
   { page: 'settings', icon: 'settings', label: 'Settings' },
 ];
@@ -331,6 +336,11 @@ async function boot() {
   store.on('game-state', (e) => {
     if (e.running || e.killed || e.code === 0 || e.code == null) return;
     const inst = store.instances.find((i) => i.id === e.instanceId);
+    // the crash doctor had a look: show what it found
+    if (e.doctor && inst) {
+      showDoctor(inst, e.doctor, { crashFile: e.crash });
+      return;
+    }
     toast('err', `${inst?.name || 'Minecraft'} crashed`, `Exit code ${e.code}. The console tab has the log.`, {
       timeout: 0,
       actions: [
@@ -338,6 +348,15 @@ async function boot() {
         { label: 'Open console', run: () => go('instance', { id: e.instanceId, tab: 'console' }) },
       ],
     });
+  });
+  // F8 in game saved a replay clip
+  api.on('clip:saved', (e) => {
+    toast('ok', 'Clip saved', `${e.seconds} seconds${e.sound ? ' with sound' : ''}. It's in Gallery → Clips.`, { timeout: 6000, actions: [{ label: 'Watch', run: () => go('gallery', { tab: 'clips' }) }] });
+  });
+  // mod loading failed and the game is showing its error window: the doctor's take, right away
+  api.on('game:doctor', (e) => {
+    const inst = store.instances.find((i) => i.id === e.instanceId);
+    if (inst && e.doctor) showDoctor(inst, e.doctor);
   });
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); go('browse', { focus: true }); }

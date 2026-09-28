@@ -81,6 +81,15 @@ class Lan extends EventEmitter {
       this.changed();
       return reply({ ok: true });
     }
+    if (action === 'clip' && req.method === 'POST') {
+      // F8 in game: the launcher saves the last seconds it recorded (see main.js, clip recorder)
+      if (!this.onClip) return reply({ ok: false, error: 'Replay clips need a newer Nimbus Launcher.' });
+      try {
+        return reply({ ok: true, ...(await this.onClip()) });
+      } catch (err) {
+        return reply({ ok: false, error: err.message });
+      }
+    }
     if (action === 'unhost' && req.method === 'POST') {
       this.stopHosting();
       return reply({ ok: true });

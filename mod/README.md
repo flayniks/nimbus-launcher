@@ -45,6 +45,14 @@ The white texture everything is tinted from is registered at run time: assets in
 
 Vanilla only updates your latency in the tab list every 30 seconds, and many servers never send it, so a Ping box that read it sat at 0. `Ping` sends the same ping F3's network chart uses (`ServerboundPingRequestPacket`, 1.20.2 and later) every two seconds while the box is on, and `PingMixin` times the answer (`handlePongResponse`). The packet's time field changed name in 1.20.5, so it's found by type. On 1.20 and 1.20.1, which have no in-game ping, the box falls back to the tab list.
 
+## Nimbus badges
+
+`Badge` puts a violet ☁ before the names of players on Nimbus: above their heads (`BadgeMixin` on `Player.getDisplayName`, only for players drawn on this client) and in the Tab list (`TabBadgeMixin` on `PlayerTabOverlay.getNameForDisplay`). Who is on Nimbus comes from the answers the cosmetics lookup already gets (`Cosmetics.isNimbus`), so it costs no extra requests. `GameProfile.getId()` became `id()` when profiles turned into records in 1.21.9, so the uuid is read through `Badge.profileId`. *Nimbus badges* in *Utilities* turns it off (`badge.nametag`).
+
+## Replay clips
+
+The launcher records the game window itself (a hidden window with WebCodecs), so the mod only has to ask. `Clips.tick` watches F8 every frame (from the HUD, only with no screen open) and posts `/clip` to the launcher's bridge; the answer shows in the corner as "Clip saved (30 s), find it in the launcher's Gallery", or why it couldn't. *F8 saves a replay clip* in *Utilities* turns the key off (`clips.key`).
+
 ## Nimbus LAN
 
 `NimbusLan` adds **Nimbus LAN** to the pause menu in singleplayer. It opens the world on a local port (`Compat.publishLan`: `publishServer(GameType, cheats, port)`, and on 26.3 `publishServer(MultiplayerScope.LAN, guestCommands, port)`) and tells the launcher over a local HTTP bridge (`-Dnimbus.bridge=http://127.0.0.1:<port>/<token>`). A background thread asks the bridge for events every second. A join request shows **"NICK wants to join your world"** at the top of the screen, drawn above the pause menu's blur. **Y** or **N** answers it (SDL scancodes on 26.3). Hosting stops once the world it opened closes (`NimbusLan.watch`, run from menus too, since the HUD isn't drawn while you leave a world). `GameStatus` also sends the launcher where you are (menus, singleplayer, server address) over the same bridge, for the Discord status. The launcher does the rest: WebRTC between the two launchers, and a local port on the friend's side that their game connects to.
