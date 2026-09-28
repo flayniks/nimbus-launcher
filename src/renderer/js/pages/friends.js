@@ -2,6 +2,7 @@
 // join worlds they host on Nimbus LAN.
 import { h, icon, clear, fail, ok, fmtAgo } from '../ui.js';
 import { api, store } from '../store.js';
+import { pickScreenshot, chatPicture } from '../share.js';
 
 const head = (uuid, size = 40) => h('img.fr-head', { src: `https://mc-heads.net/avatar/${uuid}/${size}`, alt: '', loading: 'lazy', width: size, height: size });
 const LOADERS = { vanilla: 'Vanilla', fabric: 'Fabric', quilt: 'Quilt', forge: 'Forge', neoforge: 'NeoForge' };
@@ -148,6 +149,11 @@ export function render(page, params = {}) {
       } catch (err) { input.value = text; fail('Not sent', err); }
     };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+    const picture = h('button.btn.icon', { icon: 'image', title: 'Send a screenshot' });
+    picture.onclick = async () => {
+      const m = await pickScreenshot(f);
+      if (m && chatFor === f.uuid) appendMessage(m);
+    };
     clear(chat).append(
       h('div.fr-chat-head', head(f.uuid, 36), h('div.fr-txt', h('b', f.name), h('span', statusText(f))),
         h('button.btn.sm.ghost', { title: 'Remove friend', onclick: async () => {
@@ -155,7 +161,7 @@ export function render(page, params = {}) {
           await api.friends.remove(f.uuid).catch((e) => fail('Could not remove', e));
         } }, 'Remove')),
       messagesBox,
-      h('div.fr-compose', input, h('button.btn.primary', { icon: 'send', onclick: send }, 'Send')));
+      h('div.fr-compose', picture, input, h('button.btn.primary', { icon: 'send', onclick: send }, 'Send')));
     messagesBox.append(h('div.fr-hint', 'Loading messages…'));
     api.friends.history(f.uuid).then((msgs) => {
       clear(messagesBox);
@@ -171,7 +177,10 @@ export function render(page, params = {}) {
     if (!messagesBox) return;
     messagesBox.querySelector('.fr-hint')?.remove();
     const mine = m.from === store.friends?.me?.uuid;
-    const el = h(`div.fr-msg${mine ? '.mine' : ''}${animate ? '.new' : ''}`, h('p', m.text), h('time', new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })));
+    const el = h(`div.fr-msg${mine ? '.mine' : ''}${m.image ? '.pic' : ''}${animate ? '.new' : ''}`,
+      m.image ? chatPicture(m) : null,
+      m.text ? h('p', m.text) : null,
+      h('time', new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })));
     messagesBox.append(el);
     messagesBox.scrollTop = messagesBox.scrollHeight;
   }

@@ -1,5 +1,5 @@
 // Page switching and the Play action, shared by every page.
-import { h, icon, fail, info } from './ui.js';
+import { h, icon, fail, info, closeModals } from './ui.js';
 import { api, store } from './store.js';
 import * as look from './look.js';
 
@@ -14,6 +14,7 @@ let current = null;
 /** Switches page with an exit/enter animation; each page returns its own cleanup. */
 export function go(name, params = {}) {
   const view = document.getElementById('view');
+  closeModals();
   if (current?.cleanup) { try { current.cleanup(); } catch (err) { console.error(err); } }
   for (const old of view.querySelectorAll('.page')) {
     old.classList.remove('page-enter');

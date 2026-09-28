@@ -722,6 +722,103 @@ test('friends service: cosmetics are saved by their owner and anyone can look th
   assert.equal(got.cosmetics['22222222222222222222222222222222'], undefined);
 });
 
+test('friends service: screenshots in chat are only for the two friends, and go with old messages', async () => {
+  const { createApi, memoryStore } = await import('../website/lib/friends-api.mjs');
+  const store = memoryStore();
+  const api = createApi({ store, devAuth: true });
+  const call = async (path, body, token) => {
+    const res = await api(new Request(`http://x/api/${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) }));
+    return { http: res.status, ...(await res.json()) };
+  };
+  const A = '11111111111111111111111111111111';
+  const B = '22222222222222222222222222222222';
+  const alex = await call('login/finish', { dev: true, uuid: A, name: 'Alex' });
+  const steve = await call('login/finish', { dev: true, uuid: B, name: 'Steve' });
+  const eve = await call('login/finish', { dev: true, uuid: '33333333333333333333333333333333', name: 'Eve' });
+  const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(600, 7)]).toString('base64');
+  const shot = { to: B, type: 'image/jpeg', data: jpeg, w: 1600, h: 900, text: 'look at my base' };
+  // friends only
+  assert.equal((await call('chat/image', shot, alex.token)).http, 403);
+  await store.set(`friend/${A}/${B}`, { at: 1 });
+  await store.set(`friend/${B}/${A}`, { at: 1 });
+  // only real pictures, not too big
+  assert.equal((await call('chat/image', { ...shot, data: Buffer.from('<html>').toString('base64') }, alex.token)).http, 400);
+  assert.equal((await call('chat/image', { ...shot, type: 'image/gif' }, alex.token)).http, 400);
+  assert.equal((await call('chat/image', { ...shot, data: `/9j/${'A'.repeat(1_600_000)}` }, alex.token)).http, 413);
+  assert.equal((await call('chat/image', { ...shot, w: 0 }, alex.token)).http, 400);
+  const sent = await call('chat/image', shot, alex.token);
+  assert.equal(sent.http, 200);
+  assert.equal(sent.message.text, 'look at my base');
+  assert.equal(sent.message.image.w, 1600);
+  const id = sent.message.image.id;
+  // Steve gets it in his next beat and in the history, and can fetch it; Eve can't
+  const beat = await call('beat', {}, steve.token);
+  assert.equal(beat.inbox[0].type, 'chat');
+  assert.equal(beat.inbox[0].image.id, id);
+  assert.equal((await call('chat/history', { with: A }, steve.token)).messages[0].image.id, id);
+  const got = await call('chat/image/get', { id }, steve.token);
+  assert.equal(got.http, 200);
+  assert.equal(got.data, jpeg);
+  assert.equal((await call('chat/image/get', { id }, alex.token)).http, 200);
+  assert.equal((await call('chat/image/get', { id }, eve.token)).http, 404);
+  assert.equal((await call('chat/image/get', { id: '../session' }, steve.token)).http, 404);
+  // plain messages still work, and old pictures go when the history is trimmed
+  for (let i = 0; i < 200; i++) await call('chat/send', { to: A, text: `hi ${i}` }, steve.token);
+  assert.equal((await call('chat/image/get', { id }, steve.token)).http, 404);
+  assert.equal(await store.get(`image/${id}`), null);
+  // a day's worth of pictures at most
+  for (let i = 0; i < 59; i++) await call('chat/image', shot, alex.token);
+  const tooMany = await call('chat/image', shot, alex.token);
+  assert.equal(tooMany.http, 429);
+});
+
+test('server search: names, game modes and addresses, from the built-in list and Minehut', async () => {
+  const { search, score, asAddress, plainMotd, DIRECTORY } = require('../src/core/serverdir');
+  assert.ok(DIRECTORY.length >= 30, 'a decent built-in list');
+  for (const s of DIRECTORY) {
+    assert.ok(s.name && s.address && Array.isArray(s.tags), `${s.name} is complete`);
+    assert.ok(!/\s/.test(s.address), `${s.name}'s address has no spaces`);
+  }
+  assert.equal(asAddress('play.example.com'), 'play.example.com');
+  assert.equal(asAddress('Play.Example.com:25566'), 'play.example.com:25566');
+  assert.equal(asAddress('1.2.3.4'), '1.2.3.4');
+  assert.equal(asAddress('bed wars'), null);
+  assert.equal(asAddress('hypixel'), null);
+  assert.equal(asAddress('play.example.com:99999'), null);
+  assert.equal(plainMotd('<b><gradient:#f00:#0f0>Box</gradient></b>\n<#3399ff>PvP §aNow'), 'Box PvP Now');
+  // a name beats a tag, and every word has to fit
+  const a = { name: 'SkyBlock Heaven', address: 'play.sbh.net', tags: ['Survival'] };
+  const b = { name: 'Big Network', address: 'big.net', tags: ['SkyBlock', 'Bed Wars'] };
+  assert.ok(score(a, ['skyblock']) > score(b, ['skyblock']));
+  assert.ok(score(b, ['bed', 'wars']) > 0);
+  assert.equal(score(b, ['bed', 'prison']), 0);
+  assert.ok(score(b, ['bedwars']) > 0, 'words run together still match');
+  // Minehut's live list (a stand-in here), cached between searches
+  let asked = 0;
+  const fakeFetch = async () => {
+    asked++;
+    return new Response(JSON.stringify({ servers: [
+      { name: 'TechMines', motd: '<b>TECHMINES</b> Box-PvP', playerData: { playerCount: 251 }, allCategories: ['box', 'pvp'], visibility: true, connectable: true, staticInfo: { platform: 'java' } },
+      { name: 'SkyLand', motd: 'The best skyblock', playerData: { playerCount: 12 }, allCategories: ['skyblock'], visibility: true, connectable: true, staticInfo: { platform: 'java' } },
+      { name: 'Hidden', motd: 'skyblock', playerData: { playerCount: 99 }, allCategories: ['skyblock'], visibility: false, staticInfo: { platform: 'java' } },
+      { name: 'bad name!', motd: 'skyblock', playerData: { playerCount: 99 }, allCategories: ['skyblock'] },
+    ] }));
+  };
+  let r = await search('skyblock', { fetchImpl: fakeFetch });
+  assert.deepEqual(r.minehut.map((s) => s.address), ['skyland.minehut.gg']);
+  assert.equal(r.minehut[0].players, 12);
+  assert.ok(r.directory.length > 0, 'the built-in list has SkyBlock servers');
+  assert.ok(r.directory.every((s) => /skyblock/i.test([s.name, ...s.tags].join(' '))));
+  assert.equal(r.address, null);
+  r = await search('box pvp', { fetchImpl: fakeFetch });
+  assert.equal(r.minehut[0].name, 'TechMines');
+  assert.equal(asked, 1, 'Minehut is asked once, then cached');
+  r = await search('mc.hypixel.net', { fetchImpl: fakeFetch });
+  assert.equal(r.address, 'mc.hypixel.net');
+  assert.equal(r.directory[0]?.address, 'mc.hypixel.net');
+  assert.deepEqual((await search('   ', { fetchImpl: fakeFetch })).directory, []);
+});
+
 test('friends service: Nimbus coins from daily tasks, log-ins, playing and achievements', async () => {
   const { createApi, memoryStore } = await import('../website/lib/friends-api.mjs');
   const { tasksFor, REWARDS, STATS } = await import('../website/lib/coins.mjs');
@@ -894,6 +991,57 @@ test('crash doctor: reads real crash signs and names the mod to blame', async ()
   assert.equal(d.culprits[0].name, 'Sodium');
   assert.ok(d.fixes.some((f) => f.kind === 'disable' && f.rel === 'mods/sodium.jar'));
 
+  // two mods that clash (Simple Voice Chat 2.6.24 breaks Flashback 0.39.9 and older): Fabric
+  // suggests removing Voice Chat, but updating Flashback keeps both
+  const flashback = mod('Flashback', ['flashback'], ['com/moulberry/flashback']);
+  const voicechat = mod('Simple Voice Chat', ['voicechat'], ['de/maxhenkel/voicechat']);
+  d = diagnose({ instance: fabric, mods: [voicechat, flashback, sodium], code: 1, log: [
+    '[main/ERROR]: Incompatible mods found!',
+    'net.fabricmc.loader.impl.FormattedException: Some of your mods are incompatible with the game or each other!',
+    'A potential solution has been determined, this may resolve your problem:',
+    "\t - Remove mod 'Simple Voice Chat' (voicechat) 1.21.1-2.6.24 (C:\\mods\\voicechat.jar).",
+    'More details:',
+    "\t - Mod 'Simple Voice Chat' (voicechat) 1.21.1-2.6.24 is incompatible with version 0.39.9 or earlier of mod 'Flashback' (flashback), yet a conflicting version is present: 0.39.9!",
+    "\t\t - The developer(s) of 'Simple Voice Chat' (voicechat) have found that this combination doesn't work.",
+  ] });
+  assert.equal(d.kind, 'incompatible');
+  assert.equal(d.title, 'Your Flashback is too old for Simple Voice Chat');
+  assert.deepEqual(d.culprits.map((c) => c.name), ['Simple Voice Chat', 'Flashback']);
+  assert.deepEqual(d.fixes.map((f) => f.label), ['Update Flashback', 'Turn off Flashback', 'Turn off Simple Voice Chat']);
+  assert.match(d.evidence, /Simple Voice Chat is incompatible with version 0\.39\.9 or earlier of Flashback \(you have 0\.39\.9\)/);
+  // what Fabric 0.19 really prints for Flashback 0.39.9 with Simple Voice Chat: Flashback's own rule
+  // trips over Voice Chat's "1.21.1-2.6.24" version, and Fabric's solver says a newer Flashback fixes it
+  d = diagnose({ instance: fabric, mods: [voicechat, flashback], code: 1, log: [
+    "[12:58:01] [main/INFO]: Fix: add [], remove [], replace [[flashback 0.39.9] -> add:flashback 1 ([(-∞,∞)])]",
+    '[12:58:01] [main/ERROR]: Incompatible mods found!',
+    'net.fabricmc.loader.impl.FormattedException: Some of your mods are incompatible with the game or each other!',
+    'A potential solution has been determined, this may resolve your problem:',
+    "\t - Replace mod 'Flashback' (flashback) 0.39.9 with any version that is compatible with:",
+    '\t\t - voicechat 1.21.1-2.6.24',
+    'More details:',
+    "\t - Mod 'Flashback' (flashback) 0.39.9 is incompatible with any version before 2.6.23 of mod 'Simple Voice Chat' (voicechat), yet a conflicting version is present: 1.21.1-2.6.24!",
+    "\t - Mod 'Simple Voice Chat' (voicechat) 1.21.1-2.6.24 is incompatible with version 0.39.9 or earlier of mod 'Flashback' (flashback), yet a conflicting version is present: 0.39.9!",
+  ] });
+  assert.equal(d.title, 'Your Flashback is too old for Simple Voice Chat');
+  assert.deepEqual(d.fixes.map((f) => f.label), ['Update Flashback', 'Turn off Flashback', 'Turn off Simple Voice Chat']);
+  assert.equal(d.evidence.split('\n').length, 2);
+  // never together: one of them goes
+  d = diagnose({ instance: fabric, mods: [voicechat, flashback], code: 1, log: ["\t - Mod 'Flashback' (flashback) 0.19.1 is incompatible with any version of mod 'Simple Voice Chat' (voicechat), yet a conflicting version is present: 2.5.20!"] });
+  assert.equal(d.title, "Flashback doesn't work with Simple Voice Chat");
+  assert.deepEqual(d.fixes.map((f) => f.label), ['Turn off Flashback', 'Turn off Simple Voice Chat', 'Update Flashback']);
+  // a mod that breaks newer versions of another: a newer one of it is the cure
+  d = diagnose({ instance: fabric, mods: [voicechat, flashback], code: 1, log: ["\t - Mod 'Flashback' (flashback) 0.30.0 is incompatible with version 2.6.0 or later of mod 'Simple Voice Chat' (voicechat), yet a conflicting version is present: 2.6.24!"] });
+  assert.equal(d.title, "Flashback doesn't work with your newer Simple Voice Chat");
+  assert.equal(d.fixes[0].label, 'Update Flashback');
+  // a mod that needs a newer version of another
+  d = diagnose({ instance: fabric, mods: [modmenu, sodium], code: 1, log: ["\t - Mod 'Mod Menu' (modmenu) 11.0.1 requires version 0.6.0 or later of mod 'Sodium' (sodium), but only the wrong version is present: 0.5.8!"] });
+  assert.equal(d.kind, 'dependency-version');
+  assert.equal(d.title, 'Mod Menu needs a newer Sodium');
+  assert.deepEqual(d.fixes[0], { kind: 'update', rel: 'mods/sodium.jar', label: 'Update Sodium' });
+  // newer loaders name Minecraft like a mod
+  d = diagnose({ instance: fabric, mods: [sodium], code: 1, log: ["\t - Mod 'Sodium' (sodium) 0.5.8 requires version 1.20.4 of 'Minecraft' (minecraft), but only the wrong version is present: 1.21.1!"] });
+  assert.equal(d.kind, 'wrong-version');
+
   // a mixin that doesn't apply
   d = diagnose({ instance: fabric, mods: [bad, sodium], code: 1, log: ['Mixin apply for mod badmod failed badmod.mixins.json:TitleMixin from mod badmod -> net.minecraft.class_442: org.spongepowered.asm.mixin.injection.throwables.InvalidInjectionException'] });
   assert.equal(d.kind, 'mixin');
@@ -949,7 +1097,22 @@ test('crash doctor: reads real crash signs and names the mod to blame', async ()
   jar('jei-1.0.jar', { 'META-INF/mods.toml': 'modLoader="javafml"\n[[mods]]\nmodId="jei"\ndisplayName="Just Enough Items"', 'mezz/jei/api/A.class': 'x' }, 1000);
   jar('zoom-1.0.jar', { 'fabric.mod.json': '{"id":"zoomify","name":"Zoomify","version":"1.0"}', 'dev/isxander/zoomify/Z.class': 'x' }, 1000);
   jar('zoom-2.0.jar', { 'fabric.mod.json': '{"id":"zoomify","name":"Zoomify","version":"2.0"}', 'dev/isxander/zoomify/Z.class': 'x' }, 2000);
-  const mods = await scanMods(dir);
+  // a mod bundled inside another: Fabric names it by its own id
+  const api = new AdmZip();
+  api.addFile('fabric.mod.json', Buffer.from('{"id":"voicechat_api","name":"Simple Voice Chat API","version":"2.6.20"}'));
+  const svc = new AdmZip();
+  svc.addFile('fabric.mod.json', Buffer.from('{"id":"voicechat","name":"Simple Voice Chat","version":"2.6.20","jars":[{"file":"META-INF/jars/voicechat-api-2.6.20.jar"}]}'));
+  svc.addFile('META-INF/jars/voicechat-api-2.6.20.jar', api.toBuffer());
+  svc.addFile('de/maxhenkel/voicechat/V.class', Buffer.from('x'));
+  svc.writeZip(path.join(dir, 'mods', 'voicechat-fabric-2.6.20.jar'));
+  let mods = await scanMods(dir);
+  assert.deepEqual(mods.find((m) => m.file === 'voicechat-fabric-2.6.20.jar').ids, ['voicechat', 'voicechat_api']);
+  const fb = mod('Flashback', ['flashback'], ['com/moulberry/flashback']);
+  d = diagnose({ instance: fabric, mods: [...mods.filter((m) => m.file.startsWith('voicechat')), fb], code: 1, log: ["\t - Mod 'Flashback' (flashback) 0.39.10 is incompatible with any version before 2.6.24 of mod 'Simple Voice Chat API' (voicechat_api), yet a conflicting version is present: 2.6.20!"] });
+  assert.equal(d.title, 'Your Simple Voice Chat is too old for Flashback');
+  assert.deepEqual(d.fixes[0], { kind: 'update', rel: 'mods/voicechat-fabric-2.6.20.jar', label: 'Update Simple Voice Chat' });
+  fs.rmSync(path.join(dir, 'mods', 'voicechat-fabric-2.6.20.jar'));
+  mods = await scanMods(dir);
   assert.equal(mods.length, 3);
   assert.deepEqual(mods.find((m) => m.file === 'jei-1.0.jar').ids, ['jei']);
   d = diagnose({ instance: fabric, mods, code: 1, log: [] });

@@ -82,6 +82,16 @@ async function scanMods(gameDir) {
           mod.version = j.version || null;
           for (const p of Object.keys(j.provides || {})) mod.ids.push(p);
           if (Array.isArray(j.provides)) mod.ids.push(...j.provides.filter((x) => typeof x === 'string'));
+          // mods bundled inside (Simple Voice Chat carries "voicechat_api"): Fabric's messages
+          // name those, and they come and go with this jar
+          for (const { file: inner } of Array.isArray(j.jars) ? j.jars.slice(0, 40) : []) {
+            try {
+              const e = typeof inner === 'string' && zip.getEntry(inner);
+              const nested = e && new AdmZip(e.getData()).getEntry('fabric.mod.json');
+              const id = nested && JSON.parse(nested.getData().toString('utf8').replace(/^﻿/, '')).id;
+              if (id) mod.ids.push(id);
+            } catch { /* a nested jar we can't read */ }
+          }
         } catch { /* a jar with a broken fabric.mod.json: the log will say */ }
         mod.loader = 'fabric';
       }
@@ -121,6 +131,8 @@ async function scanMods(gameDir) {
 // ------------------------------------------------------------------ reading the signs
 
 const lines = (text) => String(text || '').split(/\r?\n/);
+// how Fabric names a mod in its messages: "Mod 'Simple Voice Chat' (voicechat)"
+const MOD_REF = String.raw`[Mm]od '([^']+)' \(([^)]+)\)`;
 
 function modById(mods, id) {
   const k = String(id || '').toLowerCase();
@@ -202,6 +214,10 @@ function diagnose({ report = '', log = [], hsErr = '', code = null, instance, mo
   const missing = new Map();
   const wrongGame = [];
   const needsOther = [];
+  const clashes = [];
+  const wrongDep = [];
+  const suggestedRemove = [];
+  const suggestedReplace = [];
   for (const l of lines(logText)) {
     const who = l.match(/Mod '([^']+)' \(([^)]+)\)/);
     if (/which is missing/.test(l) || /is not installed/.test(l)) {
@@ -218,14 +234,37 @@ function diagnose({ report = '', log = [], hsErr = '', code = null, instance, mo
     }
     const install15 = l.match(/^\s*-\s*Install ([\w.-]+), (?:any|version)/);
     if (install15) missing.set(install15[1].toLowerCase(), { requiredBy: null, name: install15[1] });
-    if (/of minecraft, but only the wrong version is present/.test(l) && who) {
+    if (/of (?:'Minecraft' \(minecraft\)|minecraft), but only the wrong version/i.test(l) && who) {
       const m = modById(mods, who[2]) || modByName(mods, who[1]);
       if (m) wrongGame.push(m);
+      continue;
     }
-    const remove = l.match(/^\s*-\s*Remove mod '([^']+)' \(([^)]+)\)/);
-    if (remove) { const m = modById(mods, remove[2]) || modByName(mods, remove[1]); if (m) needsOther.push(m); }
-    const breaks = l.match(/Mod '([^']+)' \(([^)]+)\).*(?:is incompatible with|breaks)/);
-    if (breaks) { const m = modById(mods, breaks[2]) || modByName(mods, breaks[1]); if (m) needsOther.push(m); }
+    // "Mod 'A' (a) 1.0 is incompatible with <versions> of mod 'B' (b), yet a conflicting version is present: 2.0!"
+    // A's developers declared it; Fabric's suggested fix above it may name either one
+    const clash = l.match(new RegExp(`${MOD_REF}(?:\\s+\\S+)?\\s+(is incompatible with|conflicts with|breaks) (.+?) of ${MOD_REF}(?:.*present: ([^!]+)!)?`));
+    if (clash) {
+      const a = modById(mods, clash[2]) || modByName(mods, clash[1]);
+      const b = modById(mods, clash[6]) || modByName(mods, clash[5]);
+      if (a && b && a !== b) clashes.push({ by: a, with: b, range: clash[4].trim(), present: clash[7]?.trim() || null, soft: clash[3] === 'conflicts with' });
+      else if (a || b) needsOther.push(a || b);
+      continue;
+    }
+    // "Mod 'A' (a) 1.0 requires version 2.0 or later of mod 'B' (b), but only the wrong version is present: 1.5!"
+    const needs = l.match(new RegExp(`${MOD_REF}(?:\\s+\\S+)?\\s+requires (.+?) of ${MOD_REF}, but only the wrong version[^:]*: ([^!]+)!`));
+    if (needs) {
+      const a = modById(mods, needs[2]) || modByName(mods, needs[1]);
+      const b = modById(mods, needs[5]) || modByName(mods, needs[4]);
+      if (a && b && a !== b) wrongDep.push({ by: a, dep: b, range: needs[3].trim(), present: needs[6].trim() });
+      continue;
+    }
+    // Fabric's own suggestion: "Replace mod 'Flashback' (flashback) 0.39.9 with any version that
+    // is compatible with: ..." means a newer one fixes it, and that beats turning anything off
+    const replace = l.match(/^\s*-\s*Replace mod '([^']+)' \(([^)]+)\)/i);
+    if (replace) { const m = modById(mods, replace[2]) || modByName(mods, replace[1]); if (m) suggestedReplace.push(m); }
+    const solver = l.match(/Fix: add \[.*\], remove \[.*\], replace \[(.*)\]\s*$/);
+    if (solver) for (const r of solver[1].matchAll(/\[([\w.-]+) [^\]]*\] ->/g)) { const m = modById(mods, r[1]); if (m) suggestedReplace.push(m); }
+    const remove = l.match(/^\s*-\s*Remove mod '([^']+)' \(([^)]+)\)/i);
+    if (remove) { const m = modById(mods, remove[2]) || modByName(mods, remove[1]); if (m) suggestedRemove.push(m); }
   }
   // Forge and NeoForge: "Mod ID: 'x', Requested by: 'y', Expected range: '...', Actual version: '[MISSING]'"
   for (const m of all.matchAll(/Mod ID: '([^']+)', Requested by: '([^']+)', Expected range: '([^']*)', Actual version: '([^']*)'/g)) {
@@ -256,12 +295,80 @@ function diagnose({ report = '', log = [], hsErr = '', code = null, instance, mo
       fixes: uniq.slice(0, 3).flatMap((m) => [{ kind: 'update', rel: m.rel, label: `Update ${m.name}` }, disable(m)]),
     });
   }
-  if (needsOther.length) {
-    const uniq = [...new Set(needsOther)];
+  // two mods that don't work together: the one whose developers said so comes first
+  const hard = clashes.filter((c) => !c.soft);
+  if (hard.length) {
+    // the clash Fabric's own solver knows how to fix goes first
+    const renew = suggestedReplace.find((m) => hard.some((c) => c.by === m || c.with === m)) || null;
+    const c = (renew && hard.find((x) => x.by === renew || x.with === renew)) || hard[0];
+    const others = hard.length > 1 && !renew ? ` There ${hard.length > 2 ? `are ${hard.length - 1} more clashes` : 'is 1 more clash'} after this one.` : '';
+    const said = `The makers of ${c.by.name} say it doesn't work with ${/^any version$/i.test(c.range) ? c.with.name : `${c.range} of ${c.with.name}`}${c.present ? `, and you have ${c.present}` : ''}.`;
+    const update = (m) => ({ kind: 'update', rel: m.rel, label: `Update ${m.name}` });
+    let title;
+    let explain;
+    let fixes;
+    if (renew) {
+      const other = c.by === renew ? c.with : c.by;
+      title = `Your ${renew.name} is too old for ${other.name}`;
+      explain = `${renew.name} and ${other.name} don't work together as they are, and Fabric worked out that a newer ${renew.name} fixes it. Update it and you can keep both. Or turn one of them off.`;
+      fixes = [update(renew), disable(renew), disable(other)];
+    } else if (/^any version$/i.test(c.range)) {
+      // never together: one has to go (or a future update changes its mind)
+      title = `${c.by.name} doesn't work with ${c.with.name}`;
+      explain = `${said} Turn off one of the two.`;
+      fixes = [disable(c.by), disable(c.with), update(c.by)];
+    } else if (/or later|after/i.test(c.range) && !/before|or earlier|between/i.test(c.range)) {
+      // A breaks the newer B: a newer A is the likely cure
+      title = `${c.by.name} doesn't work with your newer ${c.with.name}`;
+      explain = `${said} A newer ${c.by.name} usually catches up, so update it, or turn one of the two off.`;
+      fixes = [update(c.by), disable(c.by), disable(c.with)];
+    } else {
+      // "version 0.39.9 or earlier", "any version before 2.6.24": your B is too old, so update it and keep both
+      title = `Your ${c.with.name} is too old for ${c.by.name}`;
+      explain = `${said} Update ${c.with.name} and you can keep both. Or turn one of them off.`;
+      fixes = [update(c.with), disable(c.with), disable(c.by)];
+    }
     add({
       kind: 'incompatible', weight: 80,
-      title: `${uniq[0].name} doesn't work with another of your mods`,
-      explain: 'Some mods clash with each other. Turn one of them off.',
+      title,
+      explain: explain + others,
+      culprits: [c.by, c.with],
+      fixes,
+      evidence: hard.map((x) => `${x.by.name} is incompatible with ${x.range} of ${x.with.name}${x.present ? ` (you have ${x.present})` : ''}`).join('\n'),
+    });
+  }
+  // a mod that needs a different version of another mod
+  if (wrongDep.length) {
+    const d = wrongDep[0];
+    const newer = /or later|after|\bversion \d/i.test(d.range) && !/or earlier|before/i.test(d.range);
+    add({
+      kind: 'dependency-version', weight: 82,
+      title: `${d.by.name} needs ${newer ? 'a newer' : 'a different'} ${d.dep.name}`,
+      explain: `${d.by.name} needs ${d.range} of ${d.dep.name}, and you have ${d.present}. ${newer ? `Update ${d.dep.name}` : `Change ${d.dep.name} to a version it takes`}, or turn off ${d.by.name}.`,
+      culprits: [d.by, d.dep],
+      fixes: [
+        ...(newer ? [{ kind: 'update', rel: d.dep.rel, label: `Update ${d.dep.name}` }] : []),
+        { kind: 'update', rel: d.by.rel, label: `Update ${d.by.name}` },
+        disable(d.by),
+      ],
+      evidence: `${d.by.name} requires ${d.range} of ${d.dep.name} (you have ${d.present})`,
+    });
+  }
+  if (!hard.length && !wrongDep.length && suggestedReplace.length) {
+    const m = suggestedReplace[0];
+    add({
+      kind: 'incompatible', weight: 79,
+      title: `${m.name} needs an update`,
+      explain: `${m.name} doesn't fit with your other mods as it is, and Fabric worked out that a different version of it fixes that. Update it, or turn it off.`,
+      culprits: [m],
+      fixes: [{ kind: 'update', rel: m.rel, label: `Update ${m.name}` }, disable(m)],
+    });
+  } else if (!hard.length && !wrongDep.length && (needsOther.length || suggestedRemove.length)) {
+    const uniq = [...new Set([...needsOther, ...suggestedRemove])];
+    add({
+      kind: 'incompatible', weight: 78,
+      title: uniq.length > 1 ? `${uniq[0].name} and ${uniq[1].name} don't work together` : `${uniq[0].name} doesn't work with another of your mods`,
+      explain: 'Some mods clash with each other. Turn one of them off, or update them.',
       culprits: uniq,
       fixes: uniq.slice(0, 3).map((m) => disable(m)),
     });
@@ -413,7 +520,7 @@ function diagnose({ report = '', log = [], hsErr = '', code = null, instance, mo
     culprits: best.culprits.map((m) => ({ name: m.name, rel: m.rel, file: m.file })),
     fixes: [...best.fixes, ...extra].slice(0, 6),
     also: found.slice(1, 3).map((f) => f.title),
-    evidence: [description, exception].filter(Boolean).join('\n'),
+    evidence: best.evidence || [description, exception].filter(Boolean).join('\n'),
   };
 }
 

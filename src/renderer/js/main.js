@@ -310,7 +310,10 @@ async function boot() {
   });
   store.on('friend-message', (m) => {
     const onFriends = document.querySelector('.nav-item.active')?.dataset.page === 'friends';
-    if (m.type === 'chat' && !onFriends) toast('info', m.name, m.text.length > 90 ? `${m.text.slice(0, 90)}…` : m.text, { actions: [{ label: 'Reply', run: () => go('friends', { uuid: m.from }) }] });
+    if (m.type === 'chat' && !onFriends) {
+      const text = m.image ? `📷 ${m.text || 'Sent you a screenshot'}` : m.text;
+      toast('info', m.name, text.length > 90 ? `${text.slice(0, 90)}…` : text, { actions: [{ label: m.image ? 'Look' : 'Reply', run: () => go('friends', { uuid: m.from }) }] });
+    }
     if (m.type === 'friend-request') toast('info', `${m.name} wants to be friends`, 'Open Friends to accept.', { actions: [{ label: 'Open', run: () => go('friends') }] });
     if (m.type === 'friend-added') toast('ok', `You and ${m.name} are friends now`, null);
   });

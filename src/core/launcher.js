@@ -484,9 +484,9 @@ class Launcher extends EventEmitter {
           meta = (await this.instances.contentManifest(id))[rel];
         }
         if (!meta?.projectId) throw new Error('Nimbus couldn\'t find that mod on Modrinth, so it can\'t update it. Turn it off instead.');
-        const version = await modrinth.compatibleVersion(meta.projectId, 'mod', inst);
-        if (!version) throw new Error(`There's no build of ${meta.title} for ${inst.mcVersion} yet. Turn it off for now.`);
-        if (version.id === meta.versionId) throw new Error(`${meta.title} is already the newest build for ${inst.mcVersion}. Turn it off instead.`);
+        // only ever forward: the newest release can be older than a beta that's installed
+        const version = await modrinth.newerVersion(meta.projectId, 'mod', inst, meta.versionId);
+        if (!version) throw new Error(`${meta.title} is already the newest build for ${inst.mcVersion}. Turn it off instead.`);
         return this.task(`Updating ${meta.title}`, (ctx) => modrinth.installProject(ctx, this.instances, inst, meta.projectId, version.id), { instanceId: id });
       }
       case 'memory': {

@@ -45,22 +45,66 @@ function bars(ms) {
   return h(`span.sv-bars.${cls}`, { title: ms == null ? 'No ping' : `${ms} ms` }, ...[1, 2, 3, 4].map((k) => h(`i${k <= n ? '.on' : ''}`, { style: { height: `${4 + k * 3}px` } })));
 }
 
+let lastQuery = '';
+
 export function render(page) {
-  let data = { favourites: [], fromGame: [], popular: [] };
+  let data = { favourites: [], fromGame: [], popular: [], categories: [] };
   let instances = [];
+  let results = null; // the latest search: {query, address, directory, minehut, minehutError}
+  let searchSeq = 0;
   const status = new Map(); // address -> ping result (or 'pending')
   const chosenFor = new Map(); // address -> instance id picked by hand
   const lists = h('div.sv-lists');
   const refreshBtn = h('button.btn', { icon: 'refresh', onclick: () => pingAll(true) }, 'Refresh');
+  const search = h('input.input', { type: 'search', placeholder: 'Search servers: a name, a game mode like "skyblock", or an address', value: lastQuery, spellcheck: false });
+  const chips = h('div.sv-chips');
 
   page.append(
     h('div.page-head',
-      h('div', h('h1', 'Servers'), h('p', 'Live players, ping and version for your favourite servers. Press Play to start Minecraft and join.')),
+      h('div', h('h1', 'Servers'), h('p', 'Find a server, see who\'s on and the ping live, and press Play to start Minecraft and join.')),
       h('div.spacer'),
       refreshBtn,
       h('button.btn.primary', { icon: 'plus', onclick: () => addServer() }, 'Add server')),
+    h('div.sv-search', icon('search'), search),
+    chips,
     lists,
   );
+
+  function drawChips() {
+    clear(chips);
+    const q = search.value.trim().toLowerCase();
+    for (const c of data.categories || []) {
+      chips.append(h(`button.cz-chip${q === c.toLowerCase() ? '.on' : ''}`, { onclick: () => { search.value = q === c.toLowerCase() ? '' : c; runSearch(); } }, c));
+    }
+  }
+
+  let debounce = null;
+  search.addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(runSearch, 280); });
+  search.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { clearTimeout(debounce); runSearch(); }
+    if (e.key === 'Escape' && search.value) { e.stopPropagation(); search.value = ''; runSearch(); }
+  });
+
+  async function runSearch() {
+    const q = search.value.trim();
+    lastQuery = q;
+    drawChips();
+    const seq = ++searchSeq;
+    if (!q) { results = null; draw(); return; }
+    results = { query: q, loading: true, address: null, directory: [], minehut: [] };
+    draw();
+    try {
+      const r = await api.servers.search(q);
+      if (seq !== searchSeq) return;
+      results = r;
+    } catch (err) {
+      if (seq !== searchSeq) return;
+      results = { query: q, address: null, directory: [], minehut: [], minehutError: err.message };
+    }
+    draw();
+    const found = [...(results.address ? [{ address: results.address }] : []), ...results.directory, ...results.minehut.slice(0, 24)];
+    pingList(found);
+  }
 
   function pickInstance(server) {
     const range = versionRange(status.get(server.address)?.version);
@@ -138,8 +182,48 @@ export function render(page) {
       h('div.sv-list', ...items.map((s) => card(s, typeof opts === 'function' ? opts(s) : opts))));
   }
 
+  function mine(q) {
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    const seen = new Set();
+    const hit = (s) => {
+      const st = status.get(s.address);
+      const text = [s.name, s.address, s.instance, ...(s.tags || []), st && st !== 'pending' && st.online ? st.motd?.map((r) => r.text).join('') : ''].join(' ').toLowerCase();
+      return words.every((w) => text.includes(w));
+    };
+    return [...data.favourites, ...data.fromGame].filter((s) => {
+      if (seen.has(s.address) || !hit(s)) return false;
+      seen.add(s.address);
+      return true;
+    });
+  }
+
+  function drawResults() {
+    const q = results.query;
+    const own = mine(q);
+    const taken = new Set(own.map((s) => s.address));
+    const fresh = (list) => list.filter((s) => !taken.has(s.address) && taken.add(s.address));
+    const typed = results.address && !taken.has(results.address) ? [{ name: results.address, address: results.address }] : [];
+    for (const t of typed) taken.add(t.address);
+    const dir = fresh(results.directory || []);
+    const mh = fresh(results.minehut || []);
+    const parts = [
+      section('This address', 'press the heart to keep it', typed, {}),
+      section('Your servers', null, own, (s) => ({ from: s.instance })),
+      section('Servers', 'well-known public servers', dir, {}),
+      section('Minehut servers', 'player-run servers on Minehut, online now', mh, {}),
+    ].filter(Boolean);
+    if (results.loading) parts.push(h('div.sv-hint', h('i.spinner'), h('span', `Looking for “${q}”…`)));
+    else if (!parts.length) {
+      parts.push(h('div.empty.sv-empty', icon('search'), h('b', `No servers found for “${q}”`),
+        h('span', 'Try a game mode like SkyBlock, Survival or Bed Wars, or type the server\'s address (like play.example.com).')));
+    }
+    if (results.minehutError && !results.loading) parts.push(h('div.sv-hint.warn', icon('alert'), h('span', `Minehut servers aren't in these results: ${results.minehutError}`)));
+    lists.append(...parts);
+  }
+
   function draw() {
     clear(lists);
+    if (results) { drawResults(); return; }
     const favs = section('Favourites', null, data.favourites, { favourite: true });
     const game = section('In your games', 'from the multiplayer list of each instance', data.fromGame, (s) => ({ from: s.instance }));
     const popular = section('Popular servers', 'big public servers, pinged live', data.popular.filter((p) => !data.favourites.some((f) => f.address === p.address)), {});
@@ -149,17 +233,26 @@ export function render(page) {
     lists.append(...[favs, game, popular].filter(Boolean));
   }
 
-  async function pingAll(force = false) {
-    const all = [...data.favourites, ...data.fromGame, ...data.popular];
-    const todo = all.filter((s) => force || !status.has(s.address));
+  function pingAll(force = false) {
+    const shown = results
+      ? [...(results.address ? [{ address: results.address }] : []), ...mine(results.query), ...(results.directory || []), ...(results.minehut || []).slice(0, 24)]
+      : [...data.favourites, ...data.fromGame, ...data.popular];
+    return pingList(shown, force);
+  }
+
+  async function pingList(list, force = false) {
+    const todo = [...new Map(list.map((s) => [s.address, s])).values()].filter((s) => force || !status.has(s.address));
+    if (!todo.length) return;
     for (const s of todo) status.set(s.address, 'pending');
     draw();
     let i = 0;
+    let redraw = null;
+    const soon = () => { if (!redraw) redraw = setTimeout(() => { redraw = null; draw(); }, 120); };
     const worker = async () => {
       while (i < todo.length) {
         const s = todo[i++];
         try { status.set(s.address, await api.servers.ping(s.address)); } catch (err) { status.set(s.address, { online: false, error: err.message }); }
-        draw();
+        soon();
       }
     };
     await Promise.all(Array.from({ length: 6 }, worker));
@@ -198,11 +291,13 @@ export function render(page) {
     } catch (err) {
       fail('Could not load servers', err);
     }
-    draw();
-    pingAll();
+    drawChips();
+    if (search.value.trim()) runSearch();
+    else { draw(); pingAll(); }
   }
 
   load();
+  setTimeout(() => search.focus(), 60);
   const timer = setInterval(() => { if (!document.hidden) pingAll(true); }, 60_000);
   return () => clearInterval(timer);
 }

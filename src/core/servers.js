@@ -16,7 +16,7 @@ const POPULAR = [
   { name: 'Wynncraft', address: 'play.wynncraft.com', tags: ['MMORPG', 'Quests'] },
   { name: 'Minehut', address: 'minehut.com', tags: ['Player servers'] },
   { name: 'Complex Gaming', address: 'org.mc-complex.com', tags: ['Pixelmon', 'Survival', 'Prison'] },
-  { name: 'PikaNetwork', address: 'play.pika-network.net', tags: ['Bed Wars', 'Survival', 'Skyblock'] },
+  { name: 'PikaNetwork', address: 'play.pikanetwork.net', tags: ['Bed Wars', 'Survival', 'Skyblock'] },
   { name: 'ManaCube', address: 'play.manacube.com', tags: ['Parkour', 'Skyblock', 'Survival'] },
   { name: 'BlocksMC', address: 'blocksmc.com', tags: ['Bed Wars', 'SkyWars'] },
 ];

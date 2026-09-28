@@ -53,6 +53,26 @@ async function compatibleVersion(projectId, type, instance) {
   return list.find((v) => v.version_type === 'release') || list[0] || null;
 }
 
+/**
+ * What to update to from `currentId`: the newest release published after it, else the newest
+ * beta after it. Never an older one (a project's newest *release* can be older than a beta
+ * you already have). Null when there is nothing newer.
+ */
+async function newerVersion(projectId, type, instance, currentId) {
+  const opts = { gameVersions: [instance.mcVersion] };
+  if (type === 'mod') opts.loaders = modLoaders(instance.loader);
+  const list = await getVersions(projectId, opts);
+  const at = currentId ? list.findIndex((v) => v.id === currentId) : -1;
+  let newer = at >= 0 ? list.slice(0, at) : list;
+  if (at < 0 && currentId) {
+    // installed from a build this list doesn't show: go by date
+    const cur = await getVersion(currentId).catch(() => null);
+    if (cur?.date_published) newer = list.filter((v) => v.date_published > cur.date_published);
+  }
+  newer = newer.filter((v) => v.version_type !== 'alpha');
+  return newer.find((v) => v.version_type === 'release') || newer[0] || null;
+}
+
 function primaryFile(version) {
   return version.files.find((f) => f.primary) || version.files[0];
 }
@@ -258,6 +278,6 @@ async function gameVersionTags() {
 }
 
 module.exports = {
-  API, modLoaders, search, getProject, getProjects, getVersion, getVersions, compatibleVersion,
+  API, modLoaders, search, getProject, getProjects, getVersion, getVersions, compatibleVersion, newerVersion,
   installToInstance, installProject, identifyContent, checkUpdates, installModpack, packLoader, gameVersionTags,
 };

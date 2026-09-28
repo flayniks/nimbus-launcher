@@ -302,6 +302,13 @@ export const info = (t, m, o) => toast('info', t, m, o);
 
 // ---------------------------------------------------------------- modals
 
+const openModals = new Set();
+
+/** Closes every open dialog (when going to another page, say). */
+export function closeModals() {
+  for (const close of [...openModals]) close();
+}
+
 export function modal({ title, body, footer, size = '', onClose, head } = {}) {
   const root = document.getElementById('modal-root');
   const box = h(`div.modal${size ? `.${size}` : ''}`,
@@ -314,9 +321,11 @@ export function modal({ title, body, footer, size = '', onClose, head } = {}) {
   document.addEventListener('keydown', onKey);
   root.appendChild(back);
   let closed = false;
+  openModals.add(close);
   function close() {
     if (closed) return;
     closed = true;
+    openModals.delete(close);
     document.removeEventListener('keydown', onKey);
     back.classList.add('closing');
     setTimeout(() => back.remove(), 190);

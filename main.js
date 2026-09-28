@@ -30,6 +30,7 @@ const { DiscordStatus } = require('./src/core/discord');
 const { Cosmetics } = require('./src/core/cosmetics');
 const { services } = require('./src/core/services');
 const { Servers, ping: serverPing, parseAddress } = require('./src/core/servers');
+const serverDir = require('./src/core/serverdir');
 const { Gallery, clipName } = require('./src/core/gallery');
 
 // a separate data folder (tests, or a second profile) is a separate launcher with its own lock
@@ -358,6 +359,23 @@ async function mediaResponse(req) {
   return new Response(Readable.toWeb(fs.createReadStream(file)), { headers: { 'content-type': type, 'content-length': String(st.size), 'accept-ranges': 'bytes' } });
 }
 
+/** A screenshot made small enough for chat: a JPEG at most 1600 px across and about 900 KB. */
+function shrinkForChat(file) {
+  const img = nativeImage.createFromPath(file);
+  if (img.isEmpty()) throw new Error('Could not read that picture.');
+  const { width, height } = img.getSize();
+  for (const [longest, quality] of [[1600, 85], [1280, 78], [960, 70], [720, 62]]) {
+    const scale = Math.min(1, longest / Math.max(width, height));
+    const out = scale < 1 ? img.resize({ width: Math.round(width * scale), height: Math.round(height * scale), quality: 'best' }) : img;
+    const buf = out.toJPEG(quality);
+    if (buf.length <= 900_000) {
+      const size = out.getSize();
+      return { type: 'image/jpeg', data: buf.toString('base64'), w: size.width, h: size.height };
+    }
+  }
+  throw new Error('That picture is too big to send.');
+}
+
 /** Where replay clips go: the Videos folder, or the data folder in tests. */
 function clipsFolder(root) {
   if (process.env.NIMBUS_DATA_DIR) return path.join(root, 'clips');
@@ -649,7 +667,8 @@ function registerIpc() {
     const err = await shell.openPath(dir);
     if (err) throw new Error(err);
   });
-  handle('servers:list', () => servers.list());
+  handle('servers:list', async () => ({ ...(await servers.list()), categories: serverDir.CATEGORIES }));
+  handle('servers:search', (query) => serverDir.search(String(query || '')));
   handle('servers:ping', (address) => serverPing(address));
   handle('servers:add', (entry) => servers.addFavourite(entry));
   handle('servers:remove', (address) => servers.removeFavourite(address));
@@ -827,6 +846,25 @@ function registerIpc() {
   handle('friends:chat', (to, text) => friends.chat(to, String(text || '')));
   handle('friends:history', (uuid) => friends.loadHistory(uuid));
   handle('friends:read', (uuid) => friends.markRead(uuid));
+  // screenshots in chat: only gallery screenshots, made small here before they go
+  handle('friends:sendShot', (to, file, text) => {
+    if (typeof file !== 'string' || !/\.(png|jpe?g)$/i.test(file) || !gallery.owns(file)) throw new Error('That is not a screenshot in your gallery.');
+    return friends.sendImage(String(to || ''), shrinkForChat(file), String(text || ''));
+  });
+  handle('friends:image', (id) => friends.image(String(id || '')));
+  handle('friends:copyImage', async (id) => {
+    const img = nativeImage.createFromDataURL(await friends.image(String(id || '')));
+    await clipboard.write([new ClipboardItem({ 'image/png': new Blob([img.toPNG()], { type: 'image/png' }) })]);
+  });
+  handle('friends:saveImage', async (id, from) => {
+    const url = await friends.image(String(id || ''));
+    const safe = String(from || 'friend').replace(/[^A-Za-z0-9_]/g, '');
+    const res = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath('pictures'), `${safe} ${new Date().toISOString().slice(0, 10)}.jpg`), filters: [{ name: 'Pictures', extensions: ['jpg', 'png'] }] });
+    if (res.canceled || !res.filePath) return false;
+    const img = nativeImage.createFromDataURL(url);
+    await fsp.writeFile(res.filePath, /\.png$/i.test(res.filePath) ? img.toPNG() : img.toJPEG(92));
+    return true;
+  });
 
   // Nimbus LAN
   handle('lan:state', () => lan.state());

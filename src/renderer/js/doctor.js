@@ -5,7 +5,7 @@ import { go, play } from './router.js';
 
 const KIND_ICON = {
   'missing-dependency': 'package', 'missing-library': 'package', 'wrong-version': 'layers', 'wrong-loader': 'layers',
-  duplicate: 'copy', incompatible: 'x', mixin: 'wrench', memory: 'memory', 'memory-too-much': 'memory', killed: 'memory',
+  duplicate: 'copy', incompatible: 'x', 'dependency-version': 'layers', mixin: 'wrench', memory: 'memory', 'memory-too-much': 'memory', killed: 'memory',
   java: 'cpu', graphics: 'monitor', config: 'settings', suspect: 'alert', unknown: 'alert',
 };
 
@@ -21,7 +21,7 @@ export function showDoctor(inst, d, { crashFile = null } = {}) {
         h('span.dr-icon', icon(KIND_ICON[d.kind] || 'alert')),
         h('div', h('span.dr-kicker', `${inst?.name || 'Minecraft'} crashed`), h('h2', d.title))),
       h('p.dr-explain', d.explain),
-      d.culprits?.length ? h('div.dr-culprits', h('span', 'To blame:'), ...d.culprits.map((c) => h('span.tag.warn', icon('package'), c.name))) : null,
+      d.culprits?.length ? h('div.dr-culprits', h('span', d.culprits.length > 1 ? 'Mods involved:' : 'To blame:'), ...d.culprits.map((c) => h('span.tag.warn', icon('package'), c.name))) : null,
       d.fixes?.length ? h('div.dr-label', 'Fix it') : null,
       fixes,
       d.also?.length ? h('div.dr-also', h('span', 'Also noticed:'), h('ul', ...d.also.map((a) => h('li', a)))) : null,

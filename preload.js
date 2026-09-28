@@ -83,6 +83,7 @@ contextBridge.exposeInMainWorld('nimbus', {
   servers: {
     list: () => call('servers:list'),
     ping: (address) => call('servers:ping', address),
+    search: (query) => call('servers:search', query),
     add: (entry) => call('servers:add', entry),
     remove: (address) => call('servers:remove', address),
     play: (id, address) => call('servers:play', id, address),
@@ -163,6 +164,10 @@ contextBridge.exposeInMainWorld('nimbus', {
     chat: (to, text) => call('friends:chat', to, text),
     history: (uuid) => call('friends:history', uuid),
     read: (uuid) => call('friends:read', uuid),
+    sendShot: (to, file, text) => call('friends:sendShot', to, file, text),
+    image: (id) => call('friends:image', id),
+    copyImage: (id) => call('friends:copyImage', id),
+    saveImage: (id, from) => call('friends:saveImage', id, from),
   },
   updates: {
     state: () => call('update:state'),

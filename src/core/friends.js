@@ -198,6 +198,26 @@ class Friends extends EventEmitter {
     return r.message;
   }
 
+  /** A picture message: `picture` is {type, data (base64), w, h}. */
+  async sendImage(to, picture, text = '') {
+    const r = await this.call('chat/image', { to, ...picture, text });
+    const list = this.history.get(to);
+    if (list) list.push(r.message);
+    this.hot();
+    return r.message;
+  }
+
+  /** A picture from a chat, as a data: URL (the last few are kept). */
+  async image(id) {
+    this.images = this.images || new Map();
+    if (this.images.has(id)) return this.images.get(id);
+    const r = await this.call('chat/image/get', { id });
+    const url = `data:${r.type};base64,${r.data}`;
+    this.images.set(id, url);
+    if (this.images.size > 40) this.images.delete(this.images.keys().next().value);
+    return url;
+  }
+
   async loadHistory(uuid) {
     const r = await this.call('chat/history', { with: uuid });
     this.history.set(uuid, r.messages);

@@ -1,7 +1,9 @@
 // Gallery: every screenshot from every instance in one place, and the replay clips Nimbus saved.
-// Click one to see it big; copy it, use it as the launcher background, find it or bin it.
+// Click one to see it big; send it to a friend, copy it, use it as the launcher background,
+// find it or bin it.
 import { h, icon, clear, fail, ok, modal, confirmDialog, fmtBytes, fmtAgo } from '../ui.js';
 import { api } from '../store.js';
+import { sendToFriend } from '../share.js';
 
 let lastTab = 'shots';
 
@@ -82,6 +84,7 @@ export function render(page, params = {}) {
       const act = (label, ic, run, cls = '') => h(`button.btn.sm${cls}`, { icon: ic, onclick: run }, label);
       if (tab === 'shots') {
         actions.append(
+          act('Send to a friend', 'send', () => sendToFriend(item), '.primary'),
           act('Copy', 'copy', () => api.gallery.copy(item.path).then(() => ok('Copied', 'Paste it anywhere, like a Discord chat.')).catch((e) => fail('Could not copy', e))),
           act('Use as background', 'image', () => api.gallery.background(item.path).then(() => ok('New launcher background', 'Change it any time in Settings.')).catch((e) => fail('Could not use that', e))));
       }

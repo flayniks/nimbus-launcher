@@ -10,6 +10,10 @@ const SESSION_MS = 30 * 24 * 3600_000;
 const CHAT_KEEP = 200;
 const RELAY_TYPES = new Set(['join-request', 'join-reply', 'join-cancel', 'signal']);
 const COSMETIC_SLOTS = ['hat', 'pet', 'wings', 'aura'];
+// pictures in chat: base64, checked by their first bytes; ~1.1 MB at most (the launcher sends less)
+const IMAGE_TYPES = { 'image/jpeg': { magic: '/9j/' }, 'image/webp': { magic: 'UklGR' }, 'image/png': { magic: 'iVBORw0KGgo' } };
+const IMAGE_MAX = 1_500_000;
+const IMAGES_PER_DAY = 60;
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
   status,
@@ -190,14 +194,33 @@ export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sess
       const text = String(body.text || '').trim().slice(0, 1000);
       if (!text) return fail(400, 'Empty message.');
       if (!(await isFriend(who.uuid, to))) return fail(403, 'You can only chat with friends.');
-      const message = { from: who.uuid, name: who.name, to, text, at: Date.now() };
-      const key = `chat/${pair(who.uuid, to)}/${stamp()}`;
-      await store.set(key, message);
-      await deliver(to, { type: 'chat', ...message });
-      // keep the history short
-      const keys = (await store.list(`chat/${pair(who.uuid, to)}/`)).sort();
-      for (const old of keys.slice(0, Math.max(0, keys.length - CHAT_KEEP))) await store.delete(old);
-      return json({ ok: true, message });
+      return json({ ok: true, message: await post(who, to, { text }) });
+    },
+    // a picture (a screenshot, made small by the launcher), only for the two people in the chat
+    'POST chat/image': async (req, body, who) => {
+      const to = cleanUuid(body.to);
+      if (!(await isFriend(who.uuid, to))) return fail(403, 'You can only chat with friends.');
+      const type = IMAGE_TYPES[body.type];
+      const data = String(body.data || '');
+      if (!type || !data.startsWith(type.magic) || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) return fail(400, 'That is not a picture.');
+      if (data.length > IMAGE_MAX) return fail(413, 'That picture is too big.');
+      const w = Math.round(Number(body.w));
+      const h = Math.round(Number(body.h));
+      if (!(w >= 1 && w <= 8192 && h >= 1 && h <= 8192)) return fail(400, 'Bad picture size.');
+      const day = new Date().toISOString().slice(0, 10);
+      const count = (await store.get(`imgday/${who.uuid}/${day}`))?.n || 0;
+      if (count >= IMAGES_PER_DAY) return fail(429, `That's ${IMAGES_PER_DAY} pictures today. More tomorrow!`);
+      await store.set(`imgday/${who.uuid}/${day}`, { n: count + 1 });
+      const id = hex(12);
+      await store.set(`image/${id}`, { from: who.uuid, to, type: body.type, data, w, h, at: Date.now() });
+      const text = String(body.text || '').trim().slice(0, 300);
+      return json({ ok: true, message: await post(who, to, { text, image: { id, w, h } }) });
+    },
+    'POST chat/image/get': async (req, body, who) => {
+      const id = String(body.id || '');
+      const img = /^[0-9a-f]{24}$/.test(id) ? await store.get(`image/${id}`) : null;
+      if (!img || (img.from !== who.uuid && img.to !== who.uuid)) return fail(404, 'That picture is gone.');
+      return json({ type: img.type, data: img.data, w: img.w, h: img.h });
     },
     'POST chat/history': async (req, body, who) => {
       const other = cleanUuid(body.with);
@@ -271,6 +294,20 @@ export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sess
       return json({ ok: true });
     },
   };
+
+  /** Saves a chat message, hands it to `to` and keeps the history short (pictures go with their messages). */
+  async function post(who, to, content) {
+    const message = { from: who.uuid, name: who.name, to, ...content, at: Date.now() };
+    await store.set(`chat/${pair(who.uuid, to)}/${stamp()}`, message);
+    await deliver(to, { type: 'chat', ...message });
+    const keys = (await store.list(`chat/${pair(who.uuid, to)}/`)).sort();
+    for (const old of keys.slice(0, Math.max(0, keys.length - CHAT_KEEP))) {
+      const m = await store.get(old);
+      if (m?.image?.id) await store.delete(`image/${m.image.id}`);
+      await store.delete(old);
+    }
+    return message;
+  }
 
   async function befriend(a, b) {
     const at = Date.now();
