@@ -4,6 +4,7 @@
 // same way joining a server does: the launcher "joins" a one-off server id at Mojang and the
 // service asks Mojang to confirm it. No password or token ever leaves for anywhere else.
 const EventEmitter = require('events');
+const crypto = require('crypto');
 const path = require('path');
 const { readJson, writeJson } = require('./util');
 const { services } = require('./services');
@@ -11,6 +12,15 @@ const { services } = require('./services');
 const DEFAULT_API = 'https://nimbus-launcher.netlify.app/api';
 const SLOW = 15_000;
 const FAST = 2_500;
+const BAN_CHECK = 5 * 60_000;
+
+/** An error the service sent because this account or launcher is banned. */
+function banError(data) {
+  const err = new Error(data.error || "You're banned from Nimbus.");
+  err.code = 'BANNED';
+  err.banned = data.banned;
+  return err;
+}
 
 class Friends extends EventEmitter {
   /**
@@ -33,8 +43,50 @@ class Friends extends EventEmitter {
 
   async init() {
     this.saved = { sessions: {}, unread: {}, ...(await readJson(this.file, {})) };
+    // a random id for this install of the launcher, so a ban can cover it whichever account signs in
+    if (!/^[0-9a-f]{32}$/.test(this.saved.installId || '')) {
+      this.saved.installId = crypto.randomBytes(16).toString('hex');
+      await this.persist();
+    }
     this.start();
+    this.checkBan().catch(() => {});
+    this.banTimer = setInterval(() => this.checkBan().catch(() => {}), BAN_CHECK);
+    if (this.banTimer.unref) this.banTimer.unref();
     return this;
+  }
+
+  /** The ban on this launcher, while it lasts (kept from the last answer, so being offline doesn't lift it). */
+  banned() {
+    const b = this.saved.ban;
+    if (!b) return null;
+    if (b.until && b.until <= Date.now()) return null;
+    return b;
+  }
+
+  setBan(ban) {
+    const before = JSON.stringify(this.saved.ban || null);
+    this.saved.ban = ban || null;
+    if (JSON.stringify(this.saved.ban) === before) return;
+    this.persist().catch(() => {});
+    this.emit('ban', this.banned());
+    this.emit('state', this.snapshot());
+  }
+
+  /** Asks the service whether this install (or the signed-in account) is banned. */
+  async checkBan() {
+    const base = await this.apiBase();
+    const acc = await this.account();
+    const token = acc ? this.saved.sessions[acc.uuid]?.token : null;
+    const res = await fetch(`${base}/ban/check`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ installId: this.saved.installId }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) return this.banned();
+    const data = await res.json().catch(() => ({}));
+    if ('banned' in data) this.setBan(data.banned);
+    return this.banned();
   }
 
   async persist() {
@@ -100,10 +152,14 @@ class Friends extends EventEmitter {
         signal: AbortSignal.timeout(15000),
       });
       if (join.status !== 204 && join.status !== 200) throw new Error('Mojang refused the sign-in. Sign out and back in to your account.');
-      res = await post('login/finish', { name: acc.name, serverId });
+      res = await post('login/finish', { name: acc.name, serverId, installId: this.saved.installId });
     }
     let data = {};
     try { data = await res.json(); } catch { /* not JSON: the service isn't there */ }
+    if (res.status === 403 && data.banned) {
+      this.setBan(data.banned);
+      throw banError(data);
+    }
     if (!res.ok) throw new Error(data.error || `The friends service answered ${res.status}.`);
     this.saved.sessions[acc.uuid] = { token: data.token, uuid: data.uuid, name: data.name };
     await this.persist();
@@ -125,6 +181,10 @@ class Friends extends EventEmitter {
     if (res.status === 401 && retry) {
       await this.session(true);
       return this.call(p, body, false);
+    }
+    if (res.status === 403 && data.banned) {
+      this.setBan(data.banned);
+      throw banError(data);
     }
     if (!res.ok) throw new Error(data.error || `The friends service answered ${res.status}.`);
     return data;
@@ -149,10 +209,16 @@ class Friends extends EventEmitter {
         this.update({ signedIn: false, me: null, friends: [], requests: [], outgoing: [], error: 'Sign in with a Microsoft account to use friends.' });
         return;
       }
-      const data = await this.call('beat', this.presence());
+      const data = await this.call('beat', { ...this.presence(), installId: this.saved.installId });
+      // the service answered normally, so whatever ban there was is over
+      if (this.saved.ban) this.setBan(null);
       this.update({ signedIn: true, me: data.me, friends: data.friends, requests: data.requests, outgoing: data.outgoing || [], error: null, offline: false, api: this.base });
       for (const m of data.inbox || []) this.receive(m);
     } catch (err) {
+      if (err.code === 'BANNED') {
+        this.update({ signedIn: false, me: null, friends: [], requests: [], outgoing: [], error: err.message, offline: false });
+        return;
+      }
       const offline = err.name === 'TimeoutError' || err.name === 'AbortError' || /fetch failed|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|answered 404|answered 5\d\d/i.test(`${err.message} ${err.cause?.code || ''}`);
       this.update({ error: offline ? "Can't reach Nimbus friends right now. Trying again soon." : err.message, offline });
     } finally {
@@ -180,8 +246,13 @@ class Friends extends EventEmitter {
   }
 
   snapshot() {
-    return { ...this.state, unread: { ...this.saved.unread } };
+    return { ...this.state, unread: { ...this.saved.unread }, banned: this.banned() };
   }
+
+  // ---- admins (the service checks; the launcher only shows the page to them)
+  adminUsers() { return this.call('admin/users', {}); }
+  adminBan(target, reason, days) { return this.call('admin/ban', { ...target, reason, days }); }
+  adminUnban(uuid) { return this.call('admin/unban', { uuid }); }
 
   // ---- actions
   async add(name) { const r = await this.call('friends/add', { name }); this.schedule(100); return r; }

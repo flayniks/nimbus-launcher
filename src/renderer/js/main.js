@@ -1,4 +1,4 @@
-import { h, icon, clear, fail, toast, fmtBytes, liveProgress, taskProgress } from './ui.js';
+import { h, icon, clear, fail, info, toast, fmtBytes, liveProgress, taskProgress, closeModals } from './ui.js';
 import { api, store } from './store.js';
 import { go, registerPages, applyLook } from './router.js';
 import * as home from './pages/home.js';
@@ -12,11 +12,12 @@ import * as friendsPage from './pages/friends.js';
 import * as cosmeticsPage from './pages/cosmetics.js';
 import * as serversPage from './pages/servers.js';
 import * as galleryPage from './pages/gallery.js';
+import * as adminPage from './pages/admin.js';
 import { head as skinHead } from './skinart.js';
 import { presencePill } from './look.js';
 import { showDoctor } from './doctor.js';
 
-registerPages({ home, browse, boost, accounts, settings, instance, skins, friends: friendsPage, cosmetics: cosmeticsPage, servers: serversPage, gallery: galleryPage });
+registerPages({ home, browse, boost, accounts, settings, instance, skins, friends: friendsPage, cosmetics: cosmeticsPage, servers: serversPage, gallery: galleryPage, admin: adminPage });
 
 const NAV = [
   { page: 'home', icon: 'home', label: 'Home' },
@@ -27,6 +28,7 @@ const NAV = [
   { page: 'servers', icon: 'server', label: 'Servers' },
   { page: 'gallery', icon: 'image', label: 'Gallery' },
   { page: 'friends', icon: 'users', label: 'Friends' },
+  { page: 'admin', icon: 'lock', label: 'Admin', admin: true },
   { page: 'settings', icon: 'settings', label: 'Settings' },
 ];
 
@@ -254,7 +256,7 @@ function buildShell() {
         h('button.close', { icon: 'x', title: 'Close', onclick: () => api.app.close() }))),
     h('nav.sidebar',
       h('i.nav-pill'),
-      NAV.map((n) => h('button.nav-item', { dataset: { page: n.page }, onclick: () => go(n.page) }, icon(n.icon), h('span.tip', n.label))),
+      NAV.map((n) => h('button.nav-item', { dataset: { page: n.page }, hidden: Boolean(n.admin), onclick: () => go(n.page) }, icon(n.icon), h('span.tip', n.label))),
       h('div.grow'),
       h('button.account-chip', { onclick: () => go('accounts') })),
     h('main#view'),
@@ -266,6 +268,36 @@ function buildShell() {
   defs.style.position = 'absolute';
   defs.innerHTML = '<defs><linearGradient id="g-accent" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--a1)"/><stop offset="1" stop-color="var(--a2)"/></linearGradient></defs>';
   document.body.appendChild(defs);
+}
+
+/** Covers the whole window (all but the title bar, so it can still be closed) while banned. */
+let banScreen = null;
+let banShown = '';
+function drawBan() {
+  const b = store.friends?.banned || null;
+  const key = b ? JSON.stringify(b) : '';
+  if (key === banShown) return;
+  banShown = key;
+  banScreen?.remove();
+  banScreen = null;
+  if (!b) return;
+  closeModals();
+  const again = h('button.btn', { icon: 'refresh' }, 'Check again');
+  again.onclick = async () => {
+    again.disabled = true;
+    try {
+      const still = await api.friends.checkBan();
+      if (still) info('Still banned', still.until ? `Until ${new Date(still.until).toLocaleString()}.` : null);
+    } catch (err) { fail('Could not check', err); } finally { again.disabled = false; }
+  };
+  banScreen = h('div.ban-screen',
+    h('div.ban-card',
+      h('span.ban-icon', icon('lock')),
+      h('h2', 'You\'re banned from Nimbus'),
+      h('p', b.reason ? `Reason: ${b.reason}` : 'A Nimbus admin banned this account.'),
+      h('p.muted', b.until ? `It ends ${new Date(b.until).toLocaleString()}.` : 'It doesn\'t end by itself.'),
+      h('div.ban-acts', again, h('button.btn.ghost', { onclick: () => api.app.close() }, 'Close Nimbus'))));
+  document.body.appendChild(banScreen);
 }
 
 async function boot() {
@@ -297,6 +329,15 @@ async function boot() {
   };
   store.on('friends', friendsBadge);
   friendsBadge();
+  // admins get the Admin page; a banned launcher gets nothing but the ban screen
+  const adminNav = () => {
+    const item = document.querySelector('.nav-item[data-page="admin"]');
+    if (item) item.hidden = !store.friends?.me?.admin;
+  };
+  store.on('friends', adminNav);
+  adminNav();
+  store.on('friends', drawBan);
+  drawBan();
   // Nimbus LAN: someone wants into your world, or your join changed state
   let lastAsk = '';
   store.on('lan', (l) => {

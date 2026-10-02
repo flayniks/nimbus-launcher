@@ -3,6 +3,7 @@
 // WebRTC handshake). Storage is a key/value store with list-by-prefix; on Netlify that is
 // Netlify Blobs, in tests a Map. Every write goes to its own key, so two launchers
 // writing at the same time never overwrite each other.
+import { createHash } from 'node:crypto';
 import { newWallet, settle, buy, view, owns } from './coins.mjs';
 
 const ONLINE_MS = 90_000;
@@ -25,6 +26,34 @@ const stamp = () => `${Date.now().toString(36).padStart(9, '0')}-${hex(3)}`;
 const pair = (a, b) => (a < b ? `${a}_${b}` : `${b}_${a}`);
 const cleanUuid = (u) => String(u || '').toLowerCase().replace(/-/g, '');
 const validUuid = (u) => /^[0-9a-f]{32}$/.test(u);
+const validInstall = (id) => typeof id === 'string' && /^[0-9a-f]{32}$/.test(id);
+// bump to have every signed-in player's lookup keys written again on their next request
+const INDEX_VERSION = 1;
+
+/** The uuid an offline-mode server gives a player of this name (Java's UUID.nameUUIDFromBytes). */
+export function offlineUuid(name) {
+  const h = createHash('md5').update(`OfflinePlayer:${name}`, 'utf8').digest();
+  h[6] = (h[6] & 0x0f) | 0x30;
+  h[8] = (h[8] & 0x3f) | 0x80;
+  return h.toString('hex');
+}
+
+/** Runs `fn` over `items`, `n` at a time. */
+async function mapLimit(items, n, fn) {
+  const out = new Array(items.length);
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
+    while (i < items.length) {
+      const k = i++;
+      out[k] = await fn(items[k], k);
+    }
+  }));
+  return out;
+}
+
+/** What a banned player is told (never who banned them). */
+const banView = (b) => (b ? { reason: b.reason || null, at: b.at, until: b.until || null } : null);
+const banText = (b) => `You're banned from Nimbus${b.until ? ` until ${new Date(b.until).toISOString().slice(0, 16).replace('T', ' ')} UTC` : ''}${b.reason ? `: ${b.reason}` : '.'}`;
 
 /**
  * @param {object} deps
@@ -33,14 +62,54 @@ const validUuid = (u) => /^[0-9a-f]{32}$/.test(u);
  * @param {boolean} [deps.devAuth] accept {uuid, name} without Mojang (local tests only)
  * @param {string} [deps.sessionServer] Mojang's session server
  * @param {string} [deps.profileApi] Mojang's name → uuid API
+ * @param {string[]} [deps.admins] uuids of the accounts that may use the admin routes
  */
-export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sessionServer = 'https://sessionserver.mojang.com', profileApi = 'https://api.mojang.com', now = () => Date.now() }) {
+export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sessionServer = 'https://sessionserver.mojang.com', profileApi = 'https://api.mojang.com', now = () => Date.now(), admins = [] }) {
+  const ADMINS = new Set(admins.map(cleanUuid).filter(validUuid));
+  const isAdmin = (uuid) => ADMINS.has(uuid);
+
   async function me(req) {
     const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
     if (!/^[0-9a-f]{64}$/.test(token)) return null;
     const s = await store.get(`session/${token}`);
     if (!s || Date.now() - s.created > SESSION_MS) return null;
-    return s;
+    return { ...s, token };
+  }
+
+  async function saveSession(who, patch) {
+    const { token, ...s } = who;
+    Object.assign(who, patch);
+    await store.set(`session/${token}`, { ...s, ...patch });
+  }
+
+  /** A ban that is still running, or null (an expired one is cleared). */
+  async function activeBan(key) {
+    const b = await store.get(key);
+    if (!b) return null;
+    if (b.until && b.until <= now()) {
+      await store.delete(key);
+      return null;
+    }
+    return b;
+  }
+
+  /**
+   * The keys games look players up by: their name (offline-mode servers rename uuids) and the
+   * uuid an offline-mode server gives that name. Written once per session.
+   */
+  async function index(who) {
+    await store.set(`username/${who.name.toLowerCase()}`, { uuid: who.uuid });
+    await store.set(`offuuid/${offlineUuid(who.name)}`, { uuid: who.uuid, name: who.name });
+    if (!(await store.get(`joined/${who.uuid}`))) await store.set(`joined/${who.uuid}`, { at: Date.now() });
+  }
+
+  /** Remembers which installs of the launcher an account uses, so a ban covers them too. */
+  async function recordInstall(who, installId) {
+    if (!validInstall(installId) || who.install === installId) return;
+    const list = (await store.get(`installs/${who.uuid}`))?.ids || [];
+    if (!list.includes(installId)) await store.set(`installs/${who.uuid}`, { ids: [installId, ...list].slice(0, 10) });
+    await store.set(`install/${installId}`, { uuid: who.uuid, name: who.name, at: Date.now() });
+    if (who.token) await saveSession(who, { install: installId });
   }
 
   async function user(uuid) {
@@ -102,11 +171,23 @@ export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sess
         profile = { uuid: cleanUuid(p.id), name: p.name };
       }
       if (!validUuid(profile.uuid) || !/^[A-Za-z0-9_]{1,16}$/.test(profile.name)) return fail(400, 'Bad account.');
+      // a banned account, or a banned install of the launcher, gets no session
+      const ban = (!isAdmin(profile.uuid) && await activeBan(`ban/${profile.uuid}`)) || (validInstall(body.installId) && !isAdmin(profile.uuid) && await activeBan(`baninstall/${body.installId}`));
+      if (ban) return json({ error: banText(ban), banned: banView(ban) }, 403);
       const token = hex(32);
-      await store.set(`session/${token}`, { ...profile, created: Date.now() });
+      await store.set(`session/${token}`, { ...profile, created: Date.now(), iv: INDEX_VERSION });
       const old = (await user(profile.uuid)) || {};
       await store.set(`user/${profile.uuid}`, { ...old, uuid: profile.uuid, name: profile.name, seen: Date.now() });
-      return json({ token, ...profile });
+      await index(profile);
+      await recordInstall({ ...profile, token }, body.installId);
+      return json({ token, ...profile, admin: isAdmin(profile.uuid) });
+    },
+
+    // anyone may ask whether their launcher is banned: by its install id, and by account when signed in
+    'POST ban/check': async (req, body) => {
+      const who = await me(req);
+      const ban = (who && !isAdmin(who.uuid) && await activeBan(`ban/${who.uuid}`)) || (validInstall(body.installId) && !(who && isAdmin(who.uuid)) && await activeBan(`baninstall/${body.installId}`));
+      return json({ banned: banView(ban || null) });
     },
 
     // ---- one call per poll: says "I'm here", returns friends, requests and new messages
@@ -141,7 +222,8 @@ export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sess
         if (m) inbox.push(m);
         await store.delete(key);
       }
-      return json({ me: { uuid: who.uuid, name: who.name }, friends, requests, outgoing, inbox });
+      await recordInstall(who, body.installId);
+      return json({ me: { uuid: who.uuid, name: who.name, admin: isAdmin(who.uuid) }, friends, requests, outgoing, inbox });
     },
 
     // ---- friends
@@ -267,20 +349,107 @@ export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sess
     }),
     // anyone may look: the game asks about the players around it, by uuid (or by name on
     // offline-mode servers, where uuids aren't the real ones)
+    // Everyone who plays with Nimbus is in the answer (that's how games know to show the Nimbus
+    // badge), with nothing in their slots when they wear nothing. Found by their uuid; on an
+    // offline-mode server by the uuid it made from their name; or by name.
     'POST cosmetics/get': async (req, body) => {
       const players = Array.isArray(body.players) ? body.players.slice(0, 80) : [];
+      const banned = new Set((await store.list('ban/')).map((k) => k.split('/')[1]));
       const out = {};
       await Promise.all(players.map(async (p) => {
         const key = String(p?.uuid || p?.name || '');
         let uuid = p?.uuid ? cleanUuid(p.uuid) : null;
-        let found = uuid && validUuid(uuid) ? await store.get(`cosmetics/${uuid}`) : null;
-        if (!found && typeof p?.name === 'string' && /^[A-Za-z0-9_]{1,16}$/.test(p.name)) {
-          const byName = await store.get(`cosname/${p.name.toLowerCase()}`);
-          if (byName) { uuid = byName.uuid; found = await store.get(`cosmetics/${uuid}`); }
+        if (uuid && !validUuid(uuid)) uuid = null;
+        let found = uuid ? await store.get(`cosmetics/${uuid}`) : null;
+        let nimbus = Boolean(found) || Boolean(uuid && await store.get(`user/${uuid}`));
+        if (!nimbus && uuid) {
+          const off = await store.get(`offuuid/${uuid}`);
+          if (off) { uuid = off.uuid; nimbus = true; found = await store.get(`cosmetics/${uuid}`); }
         }
-        if (found) out[key] = Object.fromEntries(COSMETIC_SLOTS.map((s) => [s, found[s] || null]));
+        if (!nimbus && typeof p?.name === 'string' && /^[A-Za-z0-9_]{1,16}$/.test(p.name)) {
+          const byName = (await store.get(`cosname/${p.name.toLowerCase()}`)) || (await store.get(`username/${p.name.toLowerCase()}`));
+          if (byName) { uuid = byName.uuid; nimbus = true; found = await store.get(`cosmetics/${uuid}`); }
+        }
+        if (!nimbus || banned.has(uuid)) return;
+        out[key] = Object.fromEntries(COSMETIC_SLOTS.map((s) => [s, found?.[s] || null]));
       }));
       return json({ cosmetics: out });
+    },
+
+    // ---- admins (by uuid, see createApi): everyone who uses Nimbus, and bans
+    'POST admin/users': async () => {
+      const t = now();
+      const bans = new Map();
+      for (const [k, b] of await mapLimit(await store.list('ban/'), 16, async (k) => [k, await store.get(k)])) {
+        if (b && !(b.until && b.until <= t)) bans.set(k.split('/')[1], b);
+      }
+      const keys = (await store.list('user/')).slice(0, 5000);
+      const users = await mapLimit(keys, 24, async (k) => {
+        const uuid = k.split('/')[1];
+        const [u, joined, w, inst] = await Promise.all([store.get(k), store.get(`joined/${uuid}`), store.get(`wallet/${uuid}`), store.get(`installs/${uuid}`)]);
+        if (!u) return null;
+        const online = t - (u.seen || 0) < ONLINE_MS;
+        return {
+          uuid, name: u.name || uuid, seen: u.seen || 0, online,
+          status: online ? u.status || 'online' : 'offline', playing: online ? u.playing || null : null, hosting: online ? u.hosting || null : null,
+          joined: joined?.at || null, coins: w ? w.coins ?? null : null, installs: inst?.ids?.length || 0,
+          admin: isAdmin(uuid), banned: bans.has(uuid) ? { ...banView(bans.get(uuid)), by: bans.get(uuid).by || null } : null,
+        };
+      });
+      const list = users.filter(Boolean);
+      // banned before they ever signed in (banned by name)
+      for (const [uuid, b] of bans) {
+        if (!list.some((x) => x.uuid === uuid)) list.push({ uuid, name: b.name || uuid, seen: 0, online: false, status: 'offline', playing: null, hosting: null, joined: null, coins: null, installs: 0, admin: false, banned: { ...banView(b), by: b.by || null } });
+      }
+      list.sort((a, b) => Number(b.online) - Number(a.online) || b.seen - a.seen);
+      return json({
+        users: list,
+        stats: {
+          total: list.filter((x) => x.seen).length,
+          online: list.filter((x) => x.online).length,
+          playing: list.filter((x) => x.online && (x.status === 'playing' || x.hosting)).length,
+          banned: bans.size,
+          newToday: list.filter((x) => x.joined && t - x.joined < 24 * 3600_000).length,
+        },
+        at: t,
+      });
+    },
+    'POST admin/ban': async (req, body, who) => {
+      let target = null;
+      if (body.uuid) {
+        const uuid = cleanUuid(body.uuid);
+        if (!validUuid(uuid)) return fail(400, 'Bad uuid.');
+        target = { uuid, name: (await user(uuid))?.name || String(body.name || '').slice(0, 16) || uuid };
+      } else {
+        const name = String(body.name || '').trim();
+        if (!/^[A-Za-z0-9_]{1,16}$/.test(name)) return fail(400, 'That is not a Minecraft name.');
+        target = await lookupName(name);
+        if (!target) return fail(404, `There is no Minecraft player called ${name}.`);
+      }
+      if (isAdmin(target.uuid)) return fail(400, target.uuid === who.uuid ? "You can't ban yourself." : "Admins can't be banned.");
+      const days = Number(body.days) || 0;
+      const ban = {
+        name: target.name,
+        reason: String(body.reason || '').trim().slice(0, 200) || null,
+        at: now(),
+        until: days > 0 ? now() + Math.min(days, 3650) * 24 * 3600_000 : null,
+        by: who.name,
+      };
+      await store.set(`ban/${target.uuid}`, ban);
+      // and every install of the launcher this account was used on
+      const installs = (await store.get(`installs/${target.uuid}`))?.ids || [];
+      for (const id of installs) await store.set(`baninstall/${id}`, { ...ban, uuid: target.uuid });
+      return json({ ok: true, uuid: target.uuid, name: target.name, installs: installs.length, ban: banView(ban) });
+    },
+    'POST admin/unban': async (req, body) => {
+      const uuid = cleanUuid(body.uuid);
+      if (!validUuid(uuid)) return fail(400, 'Bad uuid.');
+      await store.delete(`ban/${uuid}`);
+      for (const id of (await store.get(`installs/${uuid}`))?.ids || []) {
+        const b = await store.get(`baninstall/${id}`);
+        if (!b || b.uuid === uuid) await store.delete(`baninstall/${id}`);
+      }
+      return json({ ok: true });
     },
 
     // ---- relay for Nimbus LAN: join requests, answers and the WebRTC handshake
@@ -332,9 +501,18 @@ export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sess
     let body = {};
     try { body = req.method === 'POST' ? await req.json() : {}; } catch { return fail(400, 'Bad JSON.'); }
     try {
-      if (path.startsWith('login/') || path === 'cosmetics/get') return await route(req, body, null);
+      if (path.startsWith('login/') || path === 'cosmetics/get' || path === 'ban/check') return await route(req, body, null);
       const who = await me(req);
       if (!who) return fail(401, 'Sign in again.');
+      if (!isAdmin(who.uuid)) {
+        const ban = (await activeBan(`ban/${who.uuid}`)) || (path === 'beat' && validInstall(body.installId) && (await activeBan(`baninstall/${body.installId}`)));
+        if (ban) return json({ error: banText(ban), banned: banView(ban) }, 403);
+      }
+      if (path.startsWith('admin/') && !isAdmin(who.uuid)) return fail(403, 'Only Nimbus admins can do that.');
+      if (who.iv !== INDEX_VERSION) {
+        await index(who);
+        await saveSession(who, { iv: INDEX_VERSION });
+      }
       return await route(req, body, who);
     } catch (err) {
       if (err.player) return fail(400, err.message);

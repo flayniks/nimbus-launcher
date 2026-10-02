@@ -59,7 +59,9 @@ export async function play(id) {
   try {
     await api.game.launch(id);
   } catch (err) {
-    if (err.code === 'NO_ACCOUNT' || err.code === 'REAUTH') {
+    if (err.code === 'BANNED') {
+      fail('You can\'t play while banned', err);
+    } else if (err.code === 'NO_ACCOUNT' || err.code === 'REAUTH') {
       fail('Sign in again', err);
       go('accounts');
     } else {

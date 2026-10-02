@@ -312,6 +312,12 @@ class Launcher extends EventEmitter {
    * @param {string} [opts.joinServer] join this address as soon as the game is up (Nimbus LAN)
    */
   async launch(id, { detach = false, joinServer = null } = {}) {
+    const ban = this.banned?.();
+    if (ban) {
+      const err = new Error(`You're banned from Nimbus${ban.reason ? `: ${ban.reason}` : '.'}`);
+      err.code = 'BANNED';
+      throw err;
+    }
     if (this.running.has(id)) throw new Error('That instance is already running');
     const account = await this.accounts.activeSession(this.oauth());
     // Play pressed while the first install is still going: let it finish, then launch
@@ -346,6 +352,9 @@ class Launcher extends EventEmitter {
       extraJvm.push(`-Dnimbus.cosmetics=${this.paths.cosmetics}`);
       // Nimbus coins: the game counts what you do into one file and reads today's tasks from another
       extraJvm.push(`-Dnimbus.progress=${this.paths.progress}`, `-Dnimbus.tasks=${this.paths.tasks}`);
+      // the game asks the service about the players around it (cosmetics, the Nimbus badge); a
+      // launch in the first seconds after start may come before the address was looked up
+      if (!this.apiBase && this.lookupApiBase) this.apiBase = await this.lookupApiBase().catch(() => null);
       if (this.apiBase) extraJvm.push(`-Dnimbus.api=${this.apiBase}`);
       // tests: extra JVM flags (e.g. authlib pointed at a stand-in Mojang)
       if (process.env.NIMBUS_EXTRA_JVM) extraJvm.push(...process.env.NIMBUS_EXTRA_JVM.split(' ').filter(Boolean));

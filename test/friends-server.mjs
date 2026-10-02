@@ -14,7 +14,9 @@ const fakeMojang = async (url) => {
   const p = PEOPLE[name];
   return p ? new Response(JSON.stringify({ id: p[0], name: p[1] })) : new Response(null, { status: 204 });
 };
-const api = createApi({ store: memoryStore(), devAuth: true, fetch: fakeMojang, profileApi: 'http://mojang' });
+// NIMBUS_ADMINS=<uuid,...> makes those accounts admins (Alex is 0123456789abcdef0123456789abcdef)
+const admins = String(process.env.NIMBUS_ADMINS || '').split(',').filter(Boolean);
+const api = createApi({ store: memoryStore(), devAuth: true, fetch: fakeMojang, profileApi: 'http://mojang', admins });
 
 const server = http.createServer(async (req, res) => {
   const chunks = [];

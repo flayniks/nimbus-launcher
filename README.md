@@ -24,7 +24,7 @@ A fast, good-looking launcher for **Minecraft: Java Edition** with licensed (Mic
 - **Crash doctor.** When a game crashes (or a mod loader refuses to start), Nimbus says why in plain words and offers the fix: install the missing mod, turn off the broken one, give Java more memory…
 - **One-click mod updates.** Home shows which instances have updates; *Update all* does them in one go.
 - **Import instances** from CurseForge, Prism Launcher, MultiMC, ATLauncher and the Modrinth App, with their mods, worlds and settings.
-- **Nimbus badges.** Other Nimbus players get a little ☁ by their name, above their head and in the Tab list.
+- **Nimbus badges.** Other Nimbus players get a little ☁ by their name, above their head and in the Tab list, on offline-mode servers too.
 - **Cloud Hop.** A small game on the launch splash to play while Minecraft starts.
 - Live game console, play time, one-click Repair, instance duplication and an auto-join server option.
 
@@ -212,9 +212,22 @@ Nimbus checks installed Modrinth mods, packs and shaders for updates in the back
 
 In Fabric and Quilt games, Nimbus Core puts a little violet ☁ before the name of every player who uses Nimbus, above their head and in the Tab list, on any server. It knows who they are from the same service that shares cosmetics. *Nimbus Features → Utilities → Nimbus badges* turns them off.
 
+The service knows every player who signed in to Nimbus, whether they wear cosmetics or not, by their account, by name, and by the uuid an offline-mode server makes from their name, so the badge also shows on cracked servers and under a nickname there. What it can't see through: a server that gives a player a made-up uuid and name (some nick plugins), or one that hides real nametags and draws its own with separate entities.
+
 ## Cloud Hop
 
 Hit Play and the launch splash has a *Play Cloud Hop while you wait* button: hop the Nimbus cube between block pillars with Space or a click, and grab coins for bonus points. Your best score is kept. When Minecraft is ready, your current run finishes (or 15 seconds pass) and the splash gets out of the way.
+
+## Admin
+
+Nimbus admins get an **Admin** page in the sidebar (the lock). Admins are set by Minecraft uuid in `website/netlify/functions/api.mjs` (Its_Flayniks, `7bc9c85e…`), plus any listed in the `NIMBUS_ADMINS` environment variable on Netlify, comma separated. A uuid, not a name, because names can be changed and then taken by someone else. The service checks it on every admin call; the page is only the way in.
+
+- **Everyone:** every player who has signed in to Nimbus, with who's online, playing or hosting right now, when they were last seen, when they started, their coins and how many launcher installs they used. Totals at the top (users, online, playing, new today, banned), a search by name or uuid, and *Everyone / Online / Banned* filters. It refreshes every 30 seconds.
+- **Ban** someone from their row, or *Ban by name* (they don't need to have used Nimbus yet), with a reason they see and a length (1 day, 7 days, 30 days or forever). **Unban** from the same row.
+
+A banned player's launcher shows a ban screen with the reason and when it ends, and won't start games (one that's already open isn't closed, which could damage a world). The service refuses them friends, chat, cosmetics and coins, and their Nimbus badge goes. The ban covers the account and every install of the launcher it was used on, so another account on the same computer is banned too. For that, each launcher makes a random install id the first time it runs (in `friends.json`, nothing taken from the computer) and sends it when it signs in. The ban is remembered, so going offline doesn't lift it. It's checked at start, every 5 minutes, and with every friends update, so a ban or unban arrives within about 15 seconds while the launcher is open. Admins can't be banned.
+
+The launcher runs on the player's computer, so someone determined could change it to skip the ban screen; the service's side of the ban (friends, chat, cosmetics, coins) doesn't depend on the launcher.
 
 ## Discord status
 
@@ -301,6 +314,8 @@ Nimbus Features was tested in real games on Fabric 1.20.1, 1.21.1, 1.21.11 and 2
 The 1.8.0 features were run in the real launcher. Servers pinged a local vanilla 1.21.1 server (message, players, version, ping). The gallery showed an instance's screenshots, opened one big and copied it to the clipboard. The crash doctor was given a Fabric instance missing Fabric API: it opened while Fabric's own error window was still up, named the problem, installed Fabric API from Modrinth, and the game then started. Mod updates found an old mod, tagged the instance on Home and updated it. Import read made-up CurseForge, Prism, MultiMC, ATLauncher and Modrinth App instances (`test/unit.js`) and imported a Prism one in the app. Badges were checked with two Nimbus players on one server in 1.21.1, above heads and in the Tab list, and the methods they hook were checked to exist in every release from 1.20 to 26.3. Replay clips were recorded from a real game: F8 saved a 1280×720 MP4 with a poster, the game said "Clip saved", and the clip played in the Gallery. Cloud Hop was played on the real launch splash with the keyboard, and the splash left once Minecraft's window was up.
 
 In 1.8.1, two real launchers (Alex and Steve) on a local copy of the friends service sent each other screenshots: Alex from the Gallery with a message, Steve from the chat's picture button. Each got a toast, saw the picture in the chat, opened it big and copied it. The service's rules (friends only, real pictures only, size, 60 a day, pictures going with trimmed history) are in `test/unit.js`. Server search was run against the live Minehut list and the built-in list, whose addresses were all checked with a status service when they were added. The crash doctor was run against a real Fabric 1.21.1 game with Simple Voice Chat 2.6.24 and Flashback 0.39.9: it said "Your Flashback is too old for Simple Voice Chat", its first button updated Flashback to 0.39.10, and the game then started with both mods.
+
+In 1.8.2, two real launchers ran against a local copy of the service with Alex as the admin. Alex saw the Admin page (Steve didn't), the user list and totals, banned Steve for 7 days with a reason, and within a few seconds Steve's launcher showed the ban screen and refused to start a game; it was still banned after a restart. After Alex unbanned him, *Check again* cleared it. A ban by name worked too. The service's rules (admins only, admins can't be banned, a ban covering the account's installs and another account on them, bans running out, banned players losing their badge) and the badge lookups (players who wear nothing, offline-mode uuids, names, sessions from before) are in `test/unit.js`.
 
 The updater was tested by having a 1.0.0 build read a local copy of the release feed, find 1.1.0, download it and verify its checksum. The final "install and restart" step only runs on Windows.
 

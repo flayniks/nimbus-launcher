@@ -772,6 +772,91 @@ test('friends service: screenshots in chat are only for the two friends, and go 
   assert.equal(tooMany.http, 429);
 });
 
+test('friends service: every Nimbus player gets the badge, renamed or with nothing worn; admins see users and ban', async () => {
+  const { createApi, memoryStore, offlineUuid } = await import('../website/lib/friends-api.mjs');
+  const store = memoryStore();
+  let clock = Date.parse('2026-10-02T12:00:00Z');
+  const ADMIN = '7bc9c85eab2641ebbc373a283a27a3ab';
+  const api = createApi({ store, devAuth: true, admins: [ADMIN], now: () => clock, fetch: async (url) => {
+    const name = decodeURIComponent(url.split('/').pop());
+    return name.toLowerCase() === 'griefer' ? new Response(JSON.stringify({ id: '44444444444444444444444444444444', name: 'Griefer' })) : new Response(null, { status: 204 });
+  }, profileApi: 'http://mojang' });
+  const call = async (path, body = {}, token) => {
+    const res = await api(new Request(`http://x/api/${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) }));
+    return { http: res.status, ...(await res.json()) };
+  };
+  assert.equal(offlineUuid('Its_Flayniks'), '74229d8e641f3bada127e39c51c7f26f', 'the same as Java\'s UUID.nameUUIDFromBytes');
+  const ALEX = '11111111111111111111111111111111';
+  const STEVE = '22222222222222222222222222222222';
+  const INSTALL = 'abcdefabcdefabcdefabcdefabcdef12';
+  const admin = await call('login/finish', { dev: true, uuid: ADMIN, name: 'Its_Flayniks' });
+  assert.equal(admin.admin, true);
+  const alex = await call('login/finish', { dev: true, uuid: ALEX, name: 'Alex', installId: INSTALL });
+  assert.equal(alex.admin, false);
+  const steve = await call('login/finish', { dev: true, uuid: STEVE, name: 'Steve' });
+  await call('beat', {}, steve.token);
+
+  // the badge: Alex never picked a cosmetic, and an offline-mode server renames everyone's uuid
+  const got = await call('cosmetics/get', { players: [
+    { uuid: ALEX, name: 'Alex' },
+    { uuid: offlineUuid('Steve'), name: 'Susting' }, // a nick, on an offline-mode server
+    { uuid: '99999999999999999999999999999999', name: 'alex' }, // by name
+    { uuid: '88888888888888888888888888888888', name: 'Nobody' },
+  ] });
+  assert.deepEqual(got.cosmetics[ALEX], { hat: null, pet: null, wings: null, aura: null });
+  assert.ok(got.cosmetics[offlineUuid('Steve')], 'found by the offline-mode uuid');
+  assert.ok(got.cosmetics['99999999999999999999999999999999'], 'found by name');
+  assert.equal(got.cosmetics['88888888888888888888888888888888'], undefined);
+  // old sessions (from before these lookups) are indexed on their next request
+  const oldToken = 'f'.repeat(64);
+  await store.set(`session/${oldToken}`, { uuid: '55555555555555555555555555555555', name: 'Oldie', created: Date.now() });
+  await call('beat', {}, oldToken);
+  assert.ok((await call('cosmetics/get', { players: [{ uuid: offlineUuid('Oldie'), name: 'x' }] })).cosmetics[offlineUuid('Oldie')]);
+
+  // only admins
+  assert.equal((await call('admin/users', {}, alex.token)).http, 403);
+  assert.equal((await call('admin/ban', { uuid: STEVE }, alex.token)).http, 403);
+  const users = await call('admin/users', {}, admin.token);
+  assert.equal(users.http, 200);
+  assert.deepEqual(users.users.map((u) => u.name).sort(), ['Alex', 'Its_Flayniks', 'Oldie', 'Steve']);
+  assert.equal(users.stats.total, 4);
+  assert.equal(users.users.find((u) => u.name === 'Alex').installs, 1);
+  assert.equal(users.users.find((u) => u.name === 'Its_Flayniks').admin, true);
+  // admins can't be banned, not even by themselves
+  assert.equal((await call('admin/ban', { uuid: ADMIN }, admin.token)).http, 400);
+
+  // a ban: the account, and the installs it used
+  const ban = await call('admin/ban', { uuid: ALEX, reason: 'cheating', days: 7 }, admin.token);
+  assert.equal(ban.http, 200);
+  assert.equal(ban.installs, 1);
+  const blocked = await call('beat', {}, alex.token);
+  assert.equal(blocked.http, 403);
+  assert.equal(blocked.banned.reason, 'cheating');
+  assert.match(blocked.error, /banned from Nimbus until .*: cheating/);
+  assert.equal((await call('chat/send', { to: STEVE, text: 'hi' }, alex.token)).http, 403);
+  assert.equal((await call('login/finish', { dev: true, uuid: ALEX, name: 'Alex' })).http, 403);
+  // another account on the same computer is banned too, and the install alone says so
+  assert.equal((await call('login/finish', { dev: true, uuid: '66666666666666666666666666666666', name: 'Alt', installId: INSTALL })).http, 403);
+  assert.equal((await call('ban/check', { installId: INSTALL })).banned.reason, 'cheating');
+  assert.equal((await call('ban/check', { installId: '0'.repeat(32) })).banned, null);
+  // a banned player is nobody's Nimbus player any more
+  assert.equal((await call('cosmetics/get', { players: [{ uuid: ALEX }] })).cosmetics[ALEX], undefined);
+  assert.ok((await call('admin/users', {}, admin.token)).users.find((u) => u.uuid === ALEX).banned);
+  // it runs out by itself
+  clock += 8 * 24 * 3600_000;
+  assert.equal((await call('beat', {}, alex.token)).http, 200);
+  assert.equal((await call('ban/check', { installId: INSTALL })).banned, null);
+
+  // banned by name before they ever used Nimbus, then unbanned
+  const byName = await call('admin/ban', { name: 'Griefer', reason: 'griefing' }, admin.token);
+  assert.equal(byName.uuid, '44444444444444444444444444444444');
+  assert.equal(byName.ban.until, null);
+  assert.ok((await call('admin/users', {}, admin.token)).users.find((u) => u.name === 'Griefer').banned);
+  assert.equal((await call('login/finish', { dev: true, uuid: '44444444444444444444444444444444', name: 'Griefer' })).http, 403);
+  assert.equal((await call('admin/unban', { uuid: '44444444444444444444444444444444' }, admin.token)).http, 200);
+  assert.equal((await call('login/finish', { dev: true, uuid: '44444444444444444444444444444444', name: 'Griefer' })).http, 200);
+});
+
 test('server search: names, game modes and addresses, from the built-in list and Minehut', async () => {
   const { search, score, asAddress, plainMotd, DIRECTORY } = require('../src/core/serverdir');
   assert.ok(DIRECTORY.length >= 30, 'a decent built-in list');

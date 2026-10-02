@@ -4,9 +4,10 @@ const { contextBridge, ipcRenderer, webUtils, webFrame } = require('electron');
 async function call(channel, ...args) {
   const res = await ipcRenderer.invoke(channel, ...args);
   if (!res.ok) {
-    const err = new Error(res.error);
-    err.code = res.code;
-    throw err;
+    // contextBridge copies only an Error's message into the page, dropping its code, so the page
+    // gets a plain object instead: err.message and err.code both arrive
+    // eslint-disable-next-line no-throw-literal
+    throw { name: 'Error', message: res.error, code: res.code || null };
   }
   return res.data;
 }
@@ -168,6 +169,12 @@ contextBridge.exposeInMainWorld('nimbus', {
     image: (id) => call('friends:image', id),
     copyImage: (id) => call('friends:copyImage', id),
     saveImage: (id, from) => call('friends:saveImage', id, from),
+    checkBan: () => call('friends:checkBan'),
+  },
+  admin: {
+    users: () => call('admin:users'),
+    ban: (target, reason, days) => call('admin:ban', target, reason, days),
+    unban: (uuid) => call('admin:unban', uuid),
   },
   updates: {
     state: () => call('update:state'),

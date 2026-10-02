@@ -590,3 +590,47 @@ body.no-anim .anim-pv * { animation: none !important; }
 .im-tags .tag svg { width: 11px; height: 11px; }
 .im-loading { display: flex; align-items: center; gap: 10px; color: var(--muted); padding: 20px; }
 .im-loading .spinner, .btn.primary .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+
+/* Admin */
+.nav-item[hidden] { display: none; }
+.ad-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.ad-stat { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 12px; align-items: center; padding: 14px 16px; border-radius: 16px; background: var(--panel); border: 1px solid var(--border); }
+.ad-stat svg { grid-row: span 2; width: 22px; height: 22px; color: var(--a2); }
+.ad-stat b { font-size: 22px; line-height: 1.1; }
+.ad-stat span { font-size: 12px; color: var(--muted); }
+.ad-stat.on svg { color: #34d399; }
+.ad-stat.play svg { color: #60a5fa; }
+.ad-stat.ban svg { color: var(--bad, #f87171); }
+.ad-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.ad-bar .sv-chips { margin: 0; flex: 1; }
+.ad-note { font-size: 12px; }
+.ad-list { display: flex; flex-direction: column; gap: 6px; }
+.ad-row { display: grid; grid-template-columns: auto minmax(180px, 1.4fr) minmax(140px, 1fr) auto auto; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 14px; background: var(--panel); border: 1px solid var(--border); }
+.ad-row.online .fr-dot { background: #34d399; box-shadow: 0 0 8px #34d399; }
+.ad-row.banned { border-color: color-mix(in srgb, var(--bad, #f87171) 35%, transparent); background: color-mix(in srgb, var(--bad, #f87171) 6%, var(--panel)); }
+.ad-who { min-width: 0; display: grid; gap: 2px; }
+.ad-name { display: flex; align-items: center; gap: 6px; }
+.ad-name b { font-size: 14px; }
+.ad-uuid { display: flex; align-items: center; gap: 4px; }
+.ad-uuid code { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ad-uuid .btn { width: 22px; height: 22px; }
+.ad-ban { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: #fca5a5; }
+.ad-ban svg { width: 12px; height: 12px; flex: none; }
+.ad-status { font-size: 12.5px; color: var(--text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ad-status .hosting { color: var(--a2); }
+.ad-meta { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+.ad-meta span { display: inline-flex; align-items: center; gap: 5px; min-width: 44px; }
+.ad-meta svg { width: 13px; height: 13px; }
+.ad-act { display: flex; justify-content: flex-end; min-width: 84px; }
+.tag.ad-admin { background: color-mix(in srgb, var(--a1) 20%, transparent); color: color-mix(in srgb, var(--a2) 80%, white); border-color: color-mix(in srgb, var(--a1) 35%, transparent); }
+.tag.ad-banned { background: rgba(248, 113, 113, 0.12); color: #fca5a5; border-color: rgba(248, 113, 113, 0.3); }
+@media (max-width: 1100px) { .ad-row { grid-template-columns: auto 1fr auto; } .ad-status, .ad-meta { grid-column: 2; } .ad-act { grid-row: 1; grid-column: 3; } }
+
+/* the ban screen */
+.ban-screen { position: fixed; inset: var(--titlebar, 42px) 0 0 0; z-index: 9000; display: grid; place-items: center; background: rgba(6, 7, 12, 0.92); backdrop-filter: blur(14px); animation: fade 0.25s both; }
+.ban-card { display: grid; justify-items: center; gap: 8px; max-width: 440px; padding: 34px 36px; text-align: center; border-radius: 24px; background: var(--panel); border: 1px solid rgba(248, 113, 113, 0.3); box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.8); }
+.ban-card h2 { margin: 6px 0 0; font-size: 22px; }
+.ban-card p { margin: 0; line-height: 1.5; }
+.ban-icon { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 20px; background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
+.ban-icon svg { width: 30px; height: 30px; }
+.ban-acts { display: flex; gap: 8px; margin-top: 14px; }

@@ -852,6 +852,14 @@ function registerIpc() {
     return friends.sendImage(String(to || ''), shrinkForChat(file), String(text || ''));
   });
   handle('friends:image', (id) => friends.image(String(id || '')));
+  handle('friends:checkBan', () => friends.checkBan());
+  // the admin page; the service decides who is an admin
+  handle('admin:users', () => friends.adminUsers());
+  handle('admin:ban', (target, reason, days) => {
+    const t = target && typeof target === 'object' ? target : {};
+    return friends.adminBan(t.uuid ? { uuid: String(t.uuid), name: String(t.name || '') } : { name: String(t.name || '') }, String(reason || ''), Number(days) || 0);
+  });
+  handle('admin:unban', (uuid) => friends.adminUnban(String(uuid || '')));
   handle('friends:copyImage', async (id) => {
     const img = nativeImage.createFromDataURL(await friends.image(String(id || '')));
     await clipboard.write([new ClipboardItem({ 'image/png': new Blob([img.toPNG()], { type: 'image/png' }) })]);
@@ -955,6 +963,10 @@ app.whenReady().then(async () => {
   });
   handle('clips:state', () => ({ state: clips.state, error: clips.lastError || null }));
   friends.apiBase().then((b) => { launcher.apiBase = b; }).catch(() => {});
+  launcher.lookupApiBase = () => friends.apiBase();
+  // a banned launcher can't start games (the page shows why); a game already open isn't killed,
+  // which could damage a world
+  launcher.banned = () => friends.banned();
   await syncCosmeticsSetting();
   discord = new DiscordStatus({
     launcher,

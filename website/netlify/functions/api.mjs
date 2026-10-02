@@ -15,5 +15,9 @@ function openStore() {
   };
 }
 
-export default (req) => createApi({ store: openStore() })(req);
+// Nimbus admins, by Minecraft uuid (a name can be changed and taken by someone else):
+// Its_Flayniks, plus any in the NIMBUS_ADMINS environment variable (comma separated).
+const ADMINS = ['7bc9c85eab2641ebbc373a283a27a3ab', ...String(process.env.NIMBUS_ADMINS || '').split(',').map((s) => s.trim()).filter(Boolean)];
+
+export default (req) => createApi({ store: openStore(), admins: ADMINS })(req);
 export const config = { path: '/api/*' };
