@@ -1,6 +1,7 @@
 package dev.flayniks.nimbus;
 
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -8,7 +9,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import net.minecraft.client.Minecraft;
 
@@ -29,6 +32,26 @@ public final class NimbusConfig {
 			this.scale = scale;
 		}
 	}
+
+	/** One of your own texts on the HUD ("text.1" to "text.20"). */
+	public static final class Text {
+		public final String id;
+		public String text;
+		public int color;
+		public boolean box;
+
+		Text(String id, String text, int color, boolean box) {
+			this.id = id;
+			this.text = text;
+			this.color = color;
+			this.box = box;
+		}
+	}
+
+	public static final int MAX_TEXTS = 20;
+	public static final int MAX_TEXT_LENGTH = 100;
+	private static final List<Text> TEXTS = new ArrayList<>();
+	private static int textsVersion;
 
 	private static final Map<String, Boolean> TOGGLES = new HashMap<>();
 	private static final Map<String, Integer> VALUES = new HashMap<>();
@@ -57,6 +80,15 @@ public final class NimbusConfig {
 				for (Map.Entry<String, JsonElement> e : o.getAsJsonObject("hud").entrySet()) {
 					JsonObject p = e.getValue().getAsJsonObject();
 					PLACES.put(e.getKey(), new Place(p.get("x").getAsFloat(), p.get("y").getAsFloat(), p.has("scale") ? p.get("scale").getAsFloat() : 1f));
+				}
+			}
+			if (o.has("texts")) {
+				for (JsonElement e : o.getAsJsonArray("texts")) {
+					JsonObject t = e.getAsJsonObject();
+					String id = t.get("id").getAsString();
+					if (!id.matches("text\\.([1-9]|1[0-9]|20)") || text(id) != null || TEXTS.size() >= MAX_TEXTS) continue;
+					String value = t.has("text") ? t.get("text").getAsString() : "";
+					TEXTS.add(new Text(id, value.length() > MAX_TEXT_LENGTH ? value.substring(0, MAX_TEXT_LENGTH) : value, t.has("color") ? t.get("color").getAsInt() : 0, t.has("box") && t.get("box").getAsBoolean()));
 				}
 			}
 		} catch (IOException | RuntimeException ignored) {
@@ -113,6 +145,67 @@ public final class NimbusConfig {
 		if (persist) save();
 	}
 
+	// ---------------------------------------------------------------- your texts
+
+	public static List<Text> texts() {
+		load();
+		return List.copyOf(TEXTS);
+	}
+
+	/** Goes up whenever a text is added, changed or removed. */
+	public static int textsVersion() {
+		return textsVersion;
+	}
+
+	public static Text text(String id) {
+		for (Text t : TEXTS) if (t.id.equals(id)) return t;
+		return null;
+	}
+
+	/** A new text in the first free slot, or null when all 20 are taken. */
+	public static Text addText(String text, int color, boolean box) {
+		load();
+		if (TEXTS.size() >= MAX_TEXTS) return null;
+		for (int n = 1; n <= MAX_TEXTS; n++) {
+			String id = "text." + n;
+			if (text(id) != null) continue;
+			Text t = new Text(id, clip(text), color, box);
+			TEXTS.add(t);
+			// a slot used before starts fresh: shown, and placed again
+			TOGGLES.remove("hud." + id);
+			PLACES.remove(id);
+			textsVersion++;
+			save();
+			return t;
+		}
+		return null;
+	}
+
+	public static void updateText(String id, String text, int color, boolean box) {
+		load();
+		Text t = text(id);
+		if (t == null) return;
+		t.text = clip(text);
+		t.color = color;
+		t.box = box;
+		textsVersion++;
+		save();
+	}
+
+	public static void removeText(String id) {
+		load();
+		if (!TEXTS.removeIf((t) -> t.id.equals(id))) return;
+		TOGGLES.remove("hud." + id);
+		PLACES.remove(id);
+		textsVersion++;
+		save();
+	}
+
+	private static String clip(String s) {
+		String v = s == null ? "" : s;
+		return v.length() > MAX_TEXT_LENGTH ? v.substring(0, MAX_TEXT_LENGTH) : v;
+	}
+
 	public static void clearPlaces() {
 		load();
 		PLACES.clear();
@@ -140,6 +233,16 @@ public final class NimbusConfig {
 		o.add("values", v);
 		o.add("numbers", n);
 		o.add("hud", h);
+		JsonArray texts = new JsonArray();
+		for (Text mine : TEXTS) {
+			JsonObject e = new JsonObject();
+			e.addProperty("id", mine.id);
+			e.addProperty("text", mine.text);
+			e.addProperty("color", mine.color);
+			e.addProperty("box", mine.box);
+			texts.add(e);
+		}
+		o.add("texts", texts);
 		try {
 			Path f = file();
 			Files.createDirectories(f.getParent());

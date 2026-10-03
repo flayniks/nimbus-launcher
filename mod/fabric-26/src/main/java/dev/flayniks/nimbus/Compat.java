@@ -77,6 +77,9 @@ public final class Compat {
 			case 67 -> 6; // C
 			case 89 -> 28; // Y
 			case 78 -> 17; // N
+			case 297 -> 65; // F8 (replay clips)
+			case 257 -> 40; // Enter
+			case 335 -> 88; // keypad Enter
 			default -> glfwKey;
 		};
 	}
@@ -130,6 +133,10 @@ public final class Compat {
 
 	public static Screen hudEditor(Screen parent) {
 		return new HudEditor(parent);
+	}
+
+	public static Screen texts(Screen parent) {
+		return new TextsScreen(parent);
 	}
 
 	// ---------------------------------------------------------------- pictures (menu background)

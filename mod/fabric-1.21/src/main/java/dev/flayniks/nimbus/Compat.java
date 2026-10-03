@@ -83,6 +83,10 @@ public final class Compat {
 		return new HudEditor(parent);
 	}
 
+	public static Screen texts(Screen parent) {
+		return new TextsScreen(parent);
+	}
+
 	// ---------------------------------------------------------------- pictures (menu background)
 
 	/** The window's size in real pixels. */

@@ -30,6 +30,8 @@ final class Features {
 		Consumer<Integer> choose;
 		Runnable action;
 		String actionLabel;
+		/** When set, the action's label is worked out each time (a count, say). */
+		java.util.function.Supplier<String> liveLabel;
 		/** When set, the row only works while this is true (the Crazy animations extras). */
 		BooleanSupplier needs;
 		String needsHint;
@@ -180,6 +182,12 @@ final class Features {
 
 	static {
 		int hud = 0;
+		Row texts = action(hud, "Your texts", "Put your own words on the screen, up to 20, in any colour. Colour codes like &c work too", "Add", () -> Compat.setScreen(Compat.texts(Compat.screen())));
+		texts.liveLabel = () -> {
+			int n = CustomTexts.count();
+			return n == 0 ? "Add" : n + " / " + NimbusConfig.MAX_TEXTS;
+		};
+		ROWS.add(texts);
 		for (NimbusHud.Module m : NimbusHud.MODULES) ROWS.add(toggle(hud, "hud." + m.id, m.defaultOn, m.title, m.description));
 		ROWS.add(choice(hud, "hud.background", 0, "Box style", "The background behind each HUD box", NimbusHud.BACKGROUND_NAMES));
 		ROWS.add(choice(hud, "hud.accent", 0, "Accent colour", "The colour of labels and the stripe on each box", NimbusHud.ACCENT_NAMES));

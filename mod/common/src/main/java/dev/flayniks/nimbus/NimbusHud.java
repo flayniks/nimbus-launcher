@@ -413,6 +413,12 @@ public final class NimbusHud {
 	static List<Module> enabled() {
 		List<Module> out = new ArrayList<>();
 		for (Module m : MODULES) if (m.enabled()) out.add(m);
+		// your own texts, on top of the rest
+		try {
+			for (Module m : CustomTexts.modules()) if (m.enabled()) out.add(m);
+		} catch (Throwable ignored) {
+			// a broken settings file: no texts then
+		}
 		return out;
 	}
 
@@ -467,7 +473,7 @@ public final class NimbusHud {
 		try {
 			if (Compat.hudHidden() || editing) return;
 			Screen open = Compat.screen();
-			if (open instanceof FeaturesScreenBase || open instanceof SkinsScreenBase) return;
+			if (open instanceof FeaturesScreenBase || open instanceof SkinsScreenBase || open instanceof TextsScreenBase) return;
 		} catch (Throwable ignored) {
 			// fine, draw anyway
 		}

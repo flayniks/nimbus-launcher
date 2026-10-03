@@ -16,7 +16,9 @@ Like the loading screen, it is painted with rectangles and text only. Skins are 
 
 `FeaturesScreenBase` lists every option (`Features`) in four tabs: HUD, Performance, Utilities and Animations. The HUD boxes (`NimbusHud`) are drawn after the vanilla HUD (`HudMixin`) and placed with `HudEditorBase`, which stores each box's position as a fraction of the screen, so layouts survive a window resize. Zoom, fullbright and the background FPS limit (`Tweaks`) bend vanilla options past their normal range through an accessor (`OptionAccess`) and put the real values back when they're switched off. Everything is saved to the file given as `-Dnimbus.features=<file>` (the launcher shares one between all instances), or `config/nimbus-features.json` without it.
 
-Right Shift opens the menu and C zooms. On 26.3, which reads keys through SDL, the key codes are translated at runtime.
+**Your texts** (`TextsScreenBase`, `CustomTexts`): up to 20 texts of your own, saved in the same file (`texts`, ids `text.1` to `text.20`). Each one is a `NimbusHud.Module`, so the HUD editor moves, sizes and hides them like the built-in boxes, and an edit shows at once (the module reads its text every frame). A vanilla `EditBox` sits underneath for typing, as in the skins menu; Enter is read straight from the keyboard, so it works the same before and after 1.21.9 changed key events, and the field takes focus back the frame after a button click. `&0`–`&f` colour parts of a text; *Rainbow* colours it letter by letter.
+
+Right Shift opens the menu and C zooms. On 26.3, which reads keys through SDL, the key codes are translated at runtime (F8 for replay clips and Enter for your texts too).
 
 ## Crazy animations
 
