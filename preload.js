@@ -81,6 +81,15 @@ contextBridge.exposeInMainWorld('nimbus', {
     background: (file) => call('gallery:background', file),
     openFolder: (kind) => call('gallery:openFolder', kind),
   },
+  maps: {
+    search: (opts) => call('maps:search', opts),
+    categories: () => call('maps:categories'),
+    project: (id) => call('maps:project', id),
+    files: (id) => call('maps:files', id),
+    install: (instanceId, projectId, fileId) => call('maps:install', instanceId, projectId, fileId),
+    addFiles: (instanceId, paths) => call('maps:addFiles', instanceId, paths),
+    worlds: (instanceId) => call('worlds:list', instanceId),
+  },
   servers: {
     list: () => call('servers:list'),
     ping: (address) => call('servers:ping', address),

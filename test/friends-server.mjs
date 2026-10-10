@@ -16,7 +16,10 @@ const fakeMojang = async (url) => {
 };
 // NIMBUS_ADMINS=<uuid,...> makes those accounts admins (Alex is 0123456789abcdef0123456789abcdef)
 const admins = String(process.env.NIMBUS_ADMINS || '').split(',').filter(Boolean);
-const api = createApi({ store: memoryStore(), devAuth: true, fetch: fakeMojang, profileApi: 'http://mojang', admins });
+// NIMBUS_CF_URL + NIMBUS_CF_KEY point map search at a stand-in CurseForge
+const curseforge = { key: process.env.NIMBUS_CF_KEY || '', base: process.env.NIMBUS_CF_URL || 'https://api.curseforge.com' };
+const mojangOrReal = (url, opts) => (String(url).startsWith('http://mojang') ? fakeMojang(url, opts) : fetch(url, opts));
+const api = createApi({ store: memoryStore(), devAuth: true, fetch: mojangOrReal, profileApi: 'http://mojang', admins, curseforge });
 
 const server = http.createServer(async (req, res) => {
   const chunks = [];

@@ -19,5 +19,9 @@ function openStore() {
 // Its_Flayniks, plus any in the NIMBUS_ADMINS environment variable (comma separated).
 const ADMINS = ['7bc9c85eab2641ebbc373a283a27a3ab', ...String(process.env.NIMBUS_ADMINS || '').split(',').map((s) => s.trim()).filter(Boolean)];
 
-export default (req) => createApi({ store: openStore(), admins: ADMINS })(req);
+// Map search goes through CurseForge's official API with this key (Netlify → Site configuration →
+// Environment variables → CURSEFORGE_API_KEY). It never leaves the service.
+const curseforge = { key: process.env.CURSEFORGE_API_KEY || '' };
+
+export default (req) => createApi({ store: openStore(), admins: ADMINS, curseforge })(req);
 export const config = { path: '/api/*' };

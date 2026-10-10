@@ -249,6 +249,9 @@ class Friends extends EventEmitter {
     return { ...this.state, unread: { ...this.saved.unread }, banned: this.banned() };
   }
 
+  /** Map search, through the service (it holds the CurseForge key). */
+  maps(what, body = {}) { return this.call(`maps/${what}`, body); }
+
   // ---- admins (the service checks; the launcher only shows the page to them)
   adminUsers() { return this.call('admin/users', {}); }
   adminBan(target, reason, days) { return this.call('admin/ban', { ...target, reason, days }); }

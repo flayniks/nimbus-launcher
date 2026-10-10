@@ -63,10 +63,12 @@ const banText = (b) => `You're banned from Nimbus${b.until ? ` until ${new Date(
  * @param {string} [deps.sessionServer] Mojang's session server
  * @param {string} [deps.profileApi] Mojang's name → uuid API
  * @param {string[]} [deps.admins] uuids of the accounts that may use the admin routes
+ * @param {{key?: string, base?: string}} [deps.curseforge] CurseForge API key (kept here, never sent to launchers)
  */
-export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sessionServer = 'https://sessionserver.mojang.com', profileApi = 'https://api.mojang.com', now = () => Date.now(), admins = [] }) {
+export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sessionServer = 'https://sessionserver.mojang.com', profileApi = 'https://api.mojang.com', now = () => Date.now(), admins = [], curseforge = {} }) {
   const ADMINS = new Set(admins.map(cleanUuid).filter(validUuid));
   const isAdmin = (uuid) => ADMINS.has(uuid);
+  const maps = curseforgeMaps({ ...curseforge, fetch: doFetch, now });
 
   async function me(req) {
     const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
@@ -452,6 +454,13 @@ export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sess
       return json({ ok: true });
     },
 
+    // ---- maps: CurseForge's Worlds section, for signed-in players (see curseforgeMaps)
+    'POST maps/search': (req, body) => maps.search(body),
+    'POST maps/categories': () => maps.categories(),
+    'POST maps/project': (req, body) => maps.project(body.id),
+    'POST maps/files': (req, body) => maps.files(body.id),
+    'POST maps/download': (req, body) => maps.download(body.id, body.fileId),
+
     // ---- relay for Nimbus LAN: join requests, answers and the WebRTC handshake
     'POST relay': async (req, body, who) => {
       const to = cleanUuid(body.to);
@@ -518,6 +527,134 @@ export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sess
       if (err.player) return fail(400, err.message);
       return fail(500, err.message || 'Something went wrong.');
     }
+  };
+}
+
+// ---------------------------------------------------------------------------- maps
+
+const CF_GAME = 432; // Minecraft
+const CF_WORLDS = 17; // the Worlds class: maps
+const CF_SORTS = { popular: 2, updated: 3, name: 4, downloads: 6, newest: 11 };
+const CF_TTL = 10 * 60_000;
+
+/**
+ * Maps from CurseForge's Worlds section, through its official API. The key stays on the
+ * service; launchers get maps only (anything else on CurseForge is refused), in a small shape
+ * of our own. Answers are kept for ten minutes so the key's quota lasts.
+ */
+function curseforgeMaps({ key, base = 'https://api.curseforge.com', fetch: doFetch, now }) {
+  const cache = new Map();
+  const notSetUp = () => json({ error: 'Map search isn\'t set up on this Nimbus service yet.', setup: true }, 503);
+
+  async function cf(pathAndQuery) {
+    const hit = cache.get(pathAndQuery);
+    if (hit && now() - hit.at < CF_TTL) return hit.data;
+    const r = await doFetch(`${base.replace(/\/+$/, '')}${pathAndQuery}`, { headers: { 'x-api-key': key, accept: 'application/json' } });
+    if (r.status === 404) return null;
+    if (!r.ok) throw new Error(`CurseForge answered ${r.status}.`);
+    const data = await r.json();
+    if (cache.size > 300) cache.delete(cache.keys().next().value);
+    cache.set(pathAndQuery, { at: now(), data });
+    return data;
+  }
+
+  const versionsOf = (m) => [...new Set((m.latestFilesIndexes || []).map((f) => f.gameVersion).filter((v) => /^\d+\.\d+/.test(v || '')))]
+    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+
+  const brief = (m) => ({
+    id: m.id,
+    slug: m.slug,
+    name: m.name,
+    summary: m.summary || '',
+    author: m.authors?.[0]?.name || null,
+    downloads: Math.round(m.downloadCount || 0),
+    updated: m.dateModified || m.dateReleased || null,
+    logo: m.logo?.thumbnailUrl || m.logo?.url || null,
+    categories: (m.categories || []).map((c) => c.name).filter(Boolean).slice(0, 4),
+    versions: versionsOf(m),
+    url: m.links?.websiteUrl || `https://www.curseforge.com/minecraft/worlds/${m.slug}`,
+    downloadable: m.allowModDistribution !== false,
+  });
+
+  /** The project, only if it's a map. */
+  async function mapProject(id) {
+    const n = Number(id);
+    if (!Number.isInteger(n) || n <= 0) return null;
+    const r = await cf(`/v1/mods/${n}`);
+    const m = r?.data;
+    return m && m.gameId === CF_GAME && m.classId === CF_WORLDS ? m : null;
+  }
+
+  const guard = (fn) => async (...args) => {
+    if (!key) return notSetUp();
+    try {
+      return await fn(...args);
+    } catch (err) {
+      return fail(502, err.message || 'CurseForge did not answer.');
+    }
+  };
+
+  return {
+    search: guard(async (body) => {
+      const q = new URLSearchParams({ gameId: String(CF_GAME), classId: String(CF_WORLDS), sortOrder: 'desc', pageSize: '20' });
+      const query = String(body.query || '').trim().slice(0, 80);
+      if (query) q.set('searchFilter', query);
+      if (/^\d+\.\d+(\.\d+)?$/.test(String(body.gameVersion || ''))) q.set('gameVersion', body.gameVersion);
+      const cat = Number(body.category);
+      if (Number.isInteger(cat) && cat > 0) q.set('categoryId', String(cat));
+      q.set('sortField', String(CF_SORTS[body.sort] || CF_SORTS.popular));
+      const index = Math.max(0, Math.min(9980, Math.floor(Number(body.offset) || 0)));
+      q.set('index', String(index));
+      const r = await cf(`/v1/mods/search?${q}`);
+      const hits = (r?.data || []).filter((m) => m.classId === CF_WORLDS).map(brief);
+      return json({ hits, total: Math.min(r?.pagination?.totalCount || hits.length, 10_000), offset: index });
+    }),
+    categories: guard(async () => {
+      const r = await cf(`/v1/categories?gameId=${CF_GAME}&classId=${CF_WORLDS}`);
+      const list = (r?.data || []).filter((c) => !c.isClass && (c.classId === CF_WORLDS || c.parentCategoryId === CF_WORLDS)).map((c) => ({ id: c.id, name: c.name }));
+      return json({ categories: list.sort((a, b) => a.name.localeCompare(b.name)) });
+    }),
+    project: guard(async (id) => {
+      const m = await mapProject(id);
+      if (!m) return fail(404, 'That map is gone.');
+      const d = await cf(`/v1/mods/${m.id}/description`).catch(() => null);
+      return json({
+        ...brief(m),
+        authors: (m.authors || []).map((a) => a.name).filter(Boolean),
+        screenshots: (m.screenshots || []).map((s) => ({ url: s.url, thumb: s.thumbnailUrl || s.url, title: s.title || '' })).slice(0, 12),
+        description: typeof d?.data === 'string' ? d.data.slice(0, 200_000) : '',
+        downloadable: m.allowModDistribution !== false,
+      });
+    }),
+    files: guard(async (id) => {
+      const m = await mapProject(id);
+      if (!m) return fail(404, 'That map is gone.');
+      const r = await cf(`/v1/mods/${m.id}/files?pageSize=50`);
+      const files = (r?.data || []).filter((f) => f.isAvailable !== false).map((f) => ({
+        id: f.id,
+        name: f.displayName || f.fileName,
+        fileName: f.fileName,
+        size: f.fileLength || 0,
+        date: f.fileDate || null,
+        versions: (f.gameVersions || []).filter((v) => /^\d+\.\d+/.test(v)),
+        type: { 1: 'release', 2: 'beta', 3: 'alpha' }[f.releaseType] || 'release',
+        downloadable: Boolean(f.downloadUrl) || m.allowModDistribution !== false,
+      }));
+      return json({ files, downloadable: m.allowModDistribution !== false, url: brief(m).url });
+    }),
+    download: guard(async (id, fileId) => {
+      const m = await mapProject(id);
+      if (!m) return fail(404, 'That map is gone.');
+      const n = Number(fileId);
+      if (!Number.isInteger(n) || n <= 0) return fail(400, 'Bad file.');
+      const r = await cf(`/v1/mods/${m.id}/files/${n}`);
+      const f = r?.data;
+      if (!f || f.modId !== m.id) return fail(404, 'That file is gone.');
+      const url = f.downloadUrl || null;
+      if (!url) return json({ error: 'The maker of this map only allows downloads on CurseForge itself.', url: brief(m).url }, 403);
+      const sha1 = (f.hashes || []).find((x) => x.algo === 1)?.value || null;
+      return json({ url, fileName: f.fileName, size: f.fileLength || 0, sha1, name: m.name, projectId: m.id, fileId: f.id });
+    }),
   };
 }
 

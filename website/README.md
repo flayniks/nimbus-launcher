@@ -10,6 +10,15 @@ The website (`public/`) and the friends service behind Friends, chat and Nimbus 
 4. In **Site configuration → Change site name**, name it **nimbus-launcher** so it lives at `https://nimbus-launcher.netlify.app`.
    If that name is taken, pick another and put the new address in `services.json` at the repo root (`"friends": "https://<your-name>.netlify.app/api"`). Launchers read that file, so no new launcher release is needed.
 
+### Map search (CurseForge key)
+
+Maps in the launcher's Browse → Maps come from CurseForge's Worlds section, through CurseForge's official API, which needs an API key. Until it's set, the Maps tab says map search is coming and only *Add map file* works.
+
+1. Apply for a key at **https://console.curseforge.com** (sign in, then *API keys*; CurseForge reviews it).
+2. In Netlify: **Site configuration → Environment variables → Add a variable**, key `CURSEFORGE_API_KEY`, value the key, then **Deploys → Trigger deploy**.
+
+The key stays on the service: launchers never see it, and the service only answers for maps (not mods or anything else on CurseForge), to signed-in Nimbus players, with answers kept for ten minutes to spare the key's quota. Never put the key in `services.json` or anywhere in the repo.
+
 After that the site redeploys whenever a push to `main` changes `website/` (launcher-only pushes are skipped, see `ignore` in `netlify.toml`, so they don't use up the free plan's monthly build credits). Check the service at `https://<site>/api/health`, which should say `{"ok":true}`.
 
 If that address says **Not Found** (Netlify's "site not found" page) the site was deleted or renamed; if it says **Site not available**, Netlify paused it for going over the free plan's credits. Friends, chat, Nimbus LAN, shared cosmetics and Nimbus coins all need it, and the launcher then says it can't reach the Nimbus online service. Import it again (steps above), or point `services.json` at its new address.
@@ -28,6 +37,7 @@ To preview it, run any static server in `public/`, for example `python3 -m http.
 - **Presence:** each launcher calls `POST /api/beat` about every 15 seconds (every 2.5 seconds while chatting or joining). The reply carries friends, requests and new messages.
 - **Chat** keeps the last 200 messages per pair.
 - **Cosmetics:** `cosmetics/set` saves what a signed-in player wears (only what they've unlocked; commons are free); `cosmetics/get` (no sign-in) answers for a batch of players: every Nimbus player is in the answer (that's the Nimbus badge), found by uuid, by the uuid an offline-mode server makes from their name, or by name.
+- **Maps:** `maps/search`, `maps/categories`, `maps/project`, `maps/files` and `maps/download` (signed in) answer from CurseForge's Worlds class only, in a small shape of our own; `maps/download` gives the file's CurseForge download link and SHA-1, or a 403 with the map's page when its maker only allows downloads on CurseForge.
 - **Admins and bans:** admins are Minecraft uuids, set in `netlify/functions/api.mjs` and the `NIMBUS_ADMINS` environment variable (comma separated). `admin/users` lists everyone with their status, `admin/ban` (by uuid or name, with a reason and a number of days, 0 for forever) and `admin/unban`. A banned account, or any launcher install it was used on, gets a 403 with the reason on every call; `ban/check` (no sign-in) tells a launcher whether its install is banned.
 - **Nimbus coins** (`lib/coins.mjs`): `coins/state` answers with the wallet (and pays the daily log-in), `coins/progress` takes the day's totals counted by Nimbus Core and pays out daily tasks, achievements and playing time, `coins/buy` unlocks a cosmetic. Prices come from `lib/cosmetic-prices.mjs`, which `tools/cosmetics/build.mjs` writes.
 - **Relay** passes Nimbus LAN join requests, answers and the WebRTC handshake, between friends only. Game traffic never goes through the service; it flows directly between the two players' computers.

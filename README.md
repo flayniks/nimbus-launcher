@@ -7,6 +7,7 @@ A fast, good-looking launcher for **Minecraft: Java Edition** with licensed (Mic
 - **Every version.** Everything in Mojang's manifest: releases, snapshots, April Fools versions, beta, alpha and 2009 pre-classic (`rd-132211`).
 - **Every loader.** Vanilla, Fabric, Quilt, Forge (1.6.1+) and NeoForge, each with its own loader version picker.
 - **Browse Modrinth.** Search mods, modpacks, resource packs and shaders. The results are filtered to fit the instance you install into, and required dependencies come along automatically.
+- **Maps.** Search maps (adventure, parkour, puzzle, survival…) from CurseForge and install one into an instance in a click; it's waiting in Singleplayer. Or add a map .zip you downloaded.
 - **Modpacks.** Install `.mrpack` packs from Browse, or import a file you already have.
 - **Your own files.** An *Add file* button on every Browse tab and instance tab (mods, packs, shaders), or just drop files on the window. Resource packs and shader packs you add, however you add them (even straight into the folder), are switched on for you the next time you play.
 - **Nimbus Features in game.** Press *Nimbus Features* in the pause menu or title screen (or Right Shift) for 18 HUD boxes you can drag and resize (FPS, coordinates, keystrokes, CPS, ping and more), up to 20 texts of your own on the screen (any colour, even rainbow), zoom, fullbright, one-click FPS presets and 20+ other options.
@@ -176,6 +177,14 @@ Commons are free. Everything else is unlocked with **Nimbus coins** (rare 150, e
 
 Nimbus Core counts what you do in any Fabric or Quilt game: blocks mined, ores, logs and diamonds, blocks placed, mobs beaten, critical hits, distance walked, sprinted, swum, flown and ridden, food eaten, experience and levels, fish caught, nights slept, time played, time with other players and time in the Nether and the End. Creative mode doesn't count for mining, placing or fighting. It writes the day's totals to a file; while the game runs the launcher sends them to the service every minute, and the service pays out, so balances can't be edited on your computer (and each day's totals are capped at what a person could really do). In game, a *Daily tasks* box on the HUD (on by default, in *Nimbus Features → HUD*) shows how far along you are, and a card drops in at the top of the screen when you finish one. The coins arrive in the launcher with a toast. The *Earn coins* tab on the Cosmetics page lists today's tasks, what else pays and every achievement.
 
+## Maps
+
+**Browse → Maps** searches CurseForge's Worlds section: by name, kind (Adventure, Parkour, Puzzle, Survival…), Minecraft version, and popular, most downloaded, newest, recently updated or by name. A map's window has its pictures, description and versions. *Install* downloads it (checked against CurseForge's SHA-1) and unpacks the world into the instance's `saves`, so it's in Singleplayer, named after the map. A world opens in the version it was made for or a newer one, so the instance picked first is one that's new enough, and the launcher warns when it isn't. A map whose maker only allows downloads on CurseForge gets *Open on CurseForge* instead.
+
+**Add map file** puts in a map .zip from your computer (from Planet Minecraft, say). Zips come packed every way: the world at the top, inside a folder or two, or several worlds in one zip; Nimbus finds each world by its `level.dat`, leaves macOS junk out, and never writes outside the instance's `saves`.
+
+Map search needs a CurseForge API key on the Nimbus service ([`website/`](website/README.md#map-search-curseforge-key)); without one the tab says so and *Add map file* still works.
+
 ## Servers
 
 **Servers** in the sidebar pings every server as you look: its message of the day (with colours), players online (and some names), version and ping. Your favourites come first (*Add server*), then the servers already in your instances' in-game lists, then a few popular ones. *Play* picks an instance that fits the server's version (or the one you choose), starts it and joins straight away. Pings use Minecraft's own Server List Ping, with SRV records, from your computer.
@@ -279,6 +288,7 @@ src/core/                    everything that is not UI (plain Node, testable wit
   boost.js                   the FPS Boost
   servers.js                 Server List Ping, servers.dat, favourites
   serverdir.js               server search: the built-in list, Minehut, typed addresses
+  worlds.js                  an instance's worlds, and unpacking maps into them
   gallery.js                 screenshots and replay clips (served over nimbus-media://)
   crashdoctor.js             reads crash reports and logs, suggests fixes
   importer.js                instances from CurseForge, Prism, MultiMC, ATLauncher, Modrinth App
@@ -320,13 +330,15 @@ In 1.8.2, two real launchers ran against a local copy of the service with Alex a
 
 In 1.8.3, *Your texts* was driven in a real Fabric 1.21.1 game: adding texts with Enter and the *Add* button, rainbow and colour codes, a boxed one, editing one, switching styles and typing straight after a click, removing one, dragging and resizing a text in *Edit HUD layout*, and seeing them in a world; the 21st text was refused. Every game method the new screen uses was checked to exist in each release from 1.20 to 26.3.
 
+In 1.8.4, Browse → Maps ran in the real launcher against a stand-in for CurseForge's API (the real one can't be used without a key): the list, search, kinds, a map's window (pictures, description with its script stripped), installing from the window and from a card into a 1.21.1 instance, *Installed* on its card, a map only downloadable on CurseForge, *Add map file*, and the "not set up yet" message for a service without a key. The installed maps showed in Minecraft's world list under their own names and loaded in the real game. How map zips unpack (wrapped, several worlds, junk, a path trying to escape, no world) and the service's map routes are in `test/unit.js`.
+
 The updater was tested by having a 1.0.0 build read a local copy of the release feed, find 1.1.0, download it and verify its checksum. The final "install and restart" step only runs on Windows.
 
 The one thing that cannot be tested without a real Microsoft account is the sign-in round trip.
 
 ## Limits
 
-- Content search is Modrinth only. CurseForge's API needs a private key.
+- Mods, modpacks, packs and shaders come from Modrinth only. Maps come from CurseForge, which needs an API key on the Nimbus service (see above).
 - Forge older than 1.6 was a jar mod with no launcher profile, so it is not offered.
 - Linux on ARM has no Mojang Java runtime. Install a matching Java yourself and pick it in the instance settings.
 - On Apple Silicon and Windows on ARM, versions without ARM natives (1.18 and older) run on the x64 Java under Rosetta/emulation.

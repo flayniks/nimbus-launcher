@@ -633,6 +633,32 @@ function registerIpc() {
     }
     return launcher.addContentFiles(id, type, files);
   });
+  // maps: searched through the Nimbus service (CurseForge's Worlds), unpacked into an instance's saves
+  let mapCategories = null;
+  handle('maps:search', (opts) => {
+    const o = opts && typeof opts === 'object' ? opts : {};
+    return friends.maps('search', { query: String(o.query || ''), sort: String(o.sort || 'popular'), gameVersion: String(o.gameVersion || ''), category: Number(o.category) || 0, offset: Number(o.offset) || 0 });
+  });
+  handle('maps:categories', async () => {
+    if (!mapCategories) mapCategories = (await friends.maps('categories')).categories || [];
+    return mapCategories;
+  });
+  handle('maps:project', (id) => friends.maps('project', { id: Number(id) }));
+  handle('maps:files', (id) => friends.maps('files', { id: Number(id) }));
+  handle('maps:install', async (instanceId, projectId, fileId) => {
+    const file = await friends.maps('download', { id: Number(projectId), fileId: Number(fileId) });
+    return launcher.installMap(String(instanceId), file);
+  });
+  handle('maps:addFiles', async (instanceId, paths) => {
+    let files = Array.isArray(paths) ? paths.filter((p) => typeof p === 'string' && p) : [];
+    if (!files.length) {
+      const res = await dialog.showOpenDialog(win, { title: 'Add maps', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Maps', extensions: ['zip'] }] });
+      if (res.canceled) return { added: [], skipped: [] };
+      files = res.filePaths;
+    }
+    return launcher.addMapFiles(String(instanceId), files);
+  });
+  handle('worlds:list', (instanceId) => launcher.listWorlds(String(instanceId)));
   handle('content:identify', (id) => modrinth.identifyContent({ paths: launcher.paths }, launcher.instances, id));
   handle('content:updates', (id) => checkUpdatesFor(id));
   handle('content:updatesKnown', () => Object.fromEntries(updatesCache));

@@ -23,6 +23,7 @@ const { CONTENT_DIRS } = require('./instances');
 const skins = require('./skins');
 const crashdoctor = require('./crashdoctor');
 const importer = require('./importer');
+const worlds = require('./worlds');
 
 const DEFAULT_SETTINGS = {
   concurrency: 16,
@@ -557,6 +558,63 @@ class Launcher extends EventEmitter {
       this.installInstance(inst.id).catch(() => {});
       return inst;
     });
+  }
+
+  // ---- maps ---------------------------------------------------------------
+
+  savesDir(instanceId) {
+    return path.join(this.paths.gameDir(instanceId), 'saves');
+  }
+
+  /** The worlds in an instance (its singleplayer list). */
+  async listWorlds(instanceId) {
+    await this.instances.get(instanceId);
+    return worlds.listWorlds(this.savesDir(instanceId));
+  }
+
+  /**
+   * Downloads a map and unpacks its world(s) into the instance. `file` is what the service said:
+   * {url, sha1, size, name, projectId, fileId}. Only CurseForge's download servers are used.
+   */
+  async installMap(instanceId, file) {
+    const inst = await this.instances.get(instanceId);
+    let url;
+    try { url = new URL(file.url); } catch { throw new Error('That download link is broken.'); }
+    // tests serve maps from a stand-in (NIMBUS_MAP_HOST=127.0.0.1:port)
+    const testHost = process.env.NIMBUS_MAP_HOST && url.host === process.env.NIMBUS_MAP_HOST;
+    if (!testHost && (url.protocol !== 'https:' || !/(^|\.)(forgecdn\.net|curseforge\.com)$/i.test(url.hostname))) throw new Error('That map is not on CurseForge\'s download servers.');
+    return this.task(`Installing ${file.name || 'a map'}`, async (ctx, stage) => {
+      const tmp = path.join(this.paths.root, 'cache', 'maps', `${crypto.randomUUID()}.zip`);
+      try {
+        await ctx.downloader.run([{ url: url.href, path: tmp, sha1: file.sha1 || undefined, size: file.size || 0 }], { label: file.name || 'the map' });
+        stage('Unpacking the world');
+        return await worlds.installMap(tmp, this.savesDir(inst.id), {
+          name: file.name,
+          rename: true,
+          mark: { source: 'curseforge', projectId: file.projectId, fileId: file.fileId, name: file.name },
+        });
+      } finally {
+        await fsp.rm(tmp, { force: true }).catch(() => {});
+      }
+    }, { instanceId });
+  }
+
+  /** Map .zip files from this computer, into the instance's worlds. */
+  async addMapFiles(instanceId, files) {
+    const inst = await this.instances.get(instanceId);
+    const added = [];
+    const skipped = [];
+    for (const file of files) {
+      const name = path.basename(file);
+      if (!/\.zip$/i.test(file)) { skipped.push({ name, reason: 'Maps come as .zip files.' }); continue; }
+      try {
+        const got = await worlds.installMap(file, this.savesDir(inst.id), { fallback: name.replace(/\.zip$/i, ''), mark: { source: 'file', file: name } });
+        added.push(...got.map((w) => w.name));
+      } catch (err) {
+        skipped.push({ name, reason: err.message });
+      }
+    }
+    return { added, skipped };
   }
 
   /** Copies files the player picked (or dropped) into the right folder for their kind. */

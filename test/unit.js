@@ -857,6 +857,148 @@ test('friends service: every Nimbus player gets the badge, renamed or with nothi
   assert.equal((await call('login/finish', { dev: true, uuid: '44444444444444444444444444444444', name: 'Griefer' })).http, 200);
 });
 
+test('maps: a map zip unpacks into saves, however it is packed, and nothing escapes the folder', async () => {
+  const AdmZip = require('adm-zip');
+  const zlib = require('zlib');
+  const { installMap, listWorlds, safeFolder } = require('../src/core/worlds');
+  const nbtString = (name, value) => {
+    const n = Buffer.from(name);
+    const v = Buffer.from(value);
+    return Buffer.concat([Buffer.from([8, 0, n.length]), n, Buffer.from([v.length >> 8, v.length & 255]), v]);
+  };
+  const levelDat = (levelName) => zlib.gzipSync(Buffer.concat([Buffer.from([10, 0, 0, 10, 0, 4]), Buffer.from('Data'), nbtString('LevelName', levelName), Buffer.from([0, 0])]));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nimbus-maps-'));
+  const saves = path.join(dir, 'saves');
+  const zipOf = (name, entries) => {
+    const z = new AdmZip();
+    for (const [n, data] of Object.entries(entries)) z.addFile(n, Buffer.isBuffer(data) ? data : Buffer.from(data));
+    const file = path.join(dir, name);
+    z.writeZip(file);
+    return file;
+  };
+  // a world inside a wrapper folder, with macOS junk
+  let got = await installMap(zipOf('a.zip', {
+    'Parkour Paradise v2/Parkour Paradise/level.dat': levelDat('Parkour Paradise'),
+    'Parkour Paradise v2/Parkour Paradise/region/r.0.0.mca': 'region',
+    'Parkour Paradise v2/Parkour Paradise/datapacks/pp/pack.mcmeta': '{}',
+    '__MACOSX/Parkour Paradise v2/._level.dat': 'junk',
+  }), saves, { name: 'Parkour Paradise', mark: { source: 'curseforge', projectId: 42, fileId: 7 } });
+  assert.deepEqual(got, [{ folder: 'Parkour Paradise', name: 'Parkour Paradise' }]);
+  // a map left at "New World" gets its title as the name in the world list
+  got = await installMap(zipOf('nw.zip', { 'Thing/level.dat': levelDat('New World'), 'Thing/region/r.0.0.mca': 'x' }), saves, { name: 'Sky Parkour 2', rename: true });
+  assert.deepEqual(got, [{ folder: 'Sky Parkour 2', name: 'Sky Parkour 2' }]);
+  assert.equal(require('../src/core/worlds').levelName(fs.readFileSync(path.join(saves, 'Sky Parkour 2', 'level.dat'))), 'Sky Parkour 2');
+  // from a file: named after its folder, only when it had no real name
+  got = await installMap(zipOf('nw2.zip', { 'Castle Map/level.dat': levelDat('New World') }), saves, { fallback: 'download' });
+  assert.deepEqual(got, [{ folder: 'Castle Map', name: 'Castle Map' }]);
+  got = await installMap(zipOf('nw3.zip', { 'Folder/level.dat': levelDat('Real Name') }), saves, { fallback: 'download' });
+  assert.deepEqual(got, [{ folder: 'Folder', name: 'Real Name' }]);
+  assert.ok(fs.existsSync(path.join(saves, 'Parkour Paradise', 'region', 'r.0.0.mca')));
+  assert.ok(fs.existsSync(path.join(saves, 'Parkour Paradise', 'datapacks', 'pp', 'pack.mcmeta')));
+  assert.ok(!fs.existsSync(path.join(saves, '__MACOSX')));
+  // the same map again gets its own folder
+  got = await installMap(zipOf('a2.zip', { 'level.dat': levelDat('Parkour Paradise'), 'region/r.0.0.mca': 'x' }), saves, { name: 'Parkour Paradise' });
+  assert.equal(got[0].folder, 'Parkour Paradise (2)');
+  // two worlds in one zip; a level.dat deeper inside a world (a backup in it) is not a third
+  got = await installMap(zipOf('b.zip', {
+    'Lobby/level.dat': levelDat('Lobby'),
+    'Lobby/backup/level.dat': levelDat('old'),
+    'Arena/level.dat': levelDat('Arena'),
+  }), saves, { name: 'Two worlds' });
+  assert.deepEqual(got.map((w) => w.folder).sort(), ['Arena', 'Lobby']);
+  assert.ok(fs.existsSync(path.join(saves, 'Lobby', 'backup', 'level.dat')));
+  // a path that tries to climb out is dropped
+  const evil = new AdmZip();
+  evil.addFile('World/level.dat', levelDat('World'));
+  evil.addFile('World/okkk.txt', Buffer.from('ok'));
+  const evilFile = path.join(dir, 'evil.zip');
+  evil.writeZip(evilFile);
+  const raw = fs.readFileSync(evilFile).toString('latin1').replaceAll('World/okkk.txt', '../../../e.txt');
+  fs.writeFileSync(evilFile, Buffer.from(raw, 'latin1'));
+  await installMap(evilFile, saves, { name: 'World' });
+  assert.ok(!fs.existsSync(path.join(dir, 'e.txt')) && !fs.existsSync(path.join(os.tmpdir(), 'e.txt')));
+  // not a map at all
+  await assert.rejects(installMap(zipOf('c.zip', { 'readme.txt': 'hi' }), saves), /no Minecraft world/);
+  await assert.rejects(installMap(path.join(dir, 'missing.zip'), saves), /not a zip/);
+  // what's in saves: names from level.dat, and where Nimbus got them
+  const list = await listWorlds(saves);
+  assert.ok(list.some((w) => w.folder === 'Parkour Paradise' && w.map?.projectId === 42));
+  assert.ok(list.some((w) => w.folder === 'Arena' && w.name === 'Arena'));
+  assert.equal(safeFolder('Con'), 'Map');
+  assert.equal(safeFolder('  My: <Map>?. '), 'My Map');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('friends service: maps from CurseForge, only maps, with the key kept on the service', async () => {
+  const { createApi, memoryStore } = await import('../website/lib/friends-api.mjs');
+  const asked = [];
+  const world = (id, extra = {}) => ({ id, gameId: 432, classId: 17, name: `Map ${id}`, slug: `map-${id}`, summary: 'A map', downloadCount: 1234.5, dateModified: '2026-09-01T00:00:00Z',
+    authors: [{ name: 'Builder' }], logo: { thumbnailUrl: 'https://media.forgecdn.net/l.png' }, categories: [{ name: 'Parkour' }], links: { websiteUrl: `https://www.curseforge.com/minecraft/worlds/map-${id}` },
+    latestFilesIndexes: [{ gameVersion: '1.20.4' }, { gameVersion: '1.21.1' }, { gameVersion: 'Forge' }], screenshots: [{ url: 'https://media.forgecdn.net/s.png', thumbnailUrl: 'https://media.forgecdn.net/s-t.png', title: 'A' }], ...extra });
+  const fakeCf = async (url, opts) => {
+    const u = new URL(url);
+    asked.push(u.pathname + u.search);
+    assert.equal(opts.headers['x-api-key'], 'secret-key');
+    const reply = (data) => new Response(JSON.stringify({ data, pagination: { totalCount: 2 } }));
+    if (u.pathname === '/v1/mods/search') return reply([world(1), world(2), { ...world(3), classId: 6 }]);
+    if (u.pathname === '/v1/mods/1') return reply(world(1));
+    if (u.pathname === '/v1/mods/2') return reply(world(2, { allowModDistribution: false }));
+    if (u.pathname === '/v1/mods/9') return reply({ ...world(9), classId: 6 }); // a mod, not a map
+    if (u.pathname === '/v1/mods/1/description') return reply('<p>Jump!</p>');
+    if (u.pathname === '/v1/mods/1/files') return reply([{ id: 11, modId: 1, displayName: 'v2', fileName: 'map.zip', fileLength: 999, gameVersions: ['1.21.1', 'Forge'], releaseType: 1, downloadUrl: 'https://edge.forgecdn.net/files/1/1/map.zip', isAvailable: true }]);
+    if (u.pathname === '/v1/mods/1/files/11') return reply({ id: 11, modId: 1, fileName: 'map.zip', fileLength: 999, downloadUrl: 'https://edge.forgecdn.net/files/1/1/map.zip', hashes: [{ algo: 1, value: 'abc' }, { algo: 2, value: 'md5' }] });
+    if (u.pathname === '/v1/mods/2/files/22') return reply({ id: 22, modId: 2, fileName: 'm.zip', downloadUrl: null });
+    if (u.pathname === '/v1/categories') return reply([{ id: 17, name: 'Worlds', isClass: true, classId: 17 }, { id: 250, name: 'Parkour', classId: 17, parentCategoryId: 17 }, { id: 251, name: 'Adventure', classId: 17, parentCategoryId: 17 }]);
+    return new Response('{}', { status: 404 });
+  };
+  const call = (api) => async (path, body = {}, token) => {
+    const res = await api(new Request(`http://x/api/${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) }));
+    return { http: res.status, ...(await res.json()) };
+  };
+  // without a key: a clear "not set up yet"
+  const bare = call(createApi({ store: memoryStore(), devAuth: true }));
+  const u0 = await bare('login/finish', { dev: true, uuid: '11111111111111111111111111111111', name: 'Alex' });
+  const none = await bare('maps/search', { query: 'parkour' }, u0.token);
+  assert.equal(none.http, 503);
+  assert.equal(none.setup, true);
+
+  const c = call(createApi({ store: memoryStore(), devAuth: true, fetch: fakeCf, curseforge: { key: 'secret-key', base: 'https://cf.test' } }));
+  const me = await c('login/finish', { dev: true, uuid: '11111111111111111111111111111111', name: 'Alex' });
+  assert.equal((await c('maps/search', { query: 'parkour' })).http, 401, 'signed-in players only');
+  const found = await c('maps/search', { query: 'parkour', sort: 'downloads', gameVersion: '1.21.1', category: 250, offset: 20 }, me.token);
+  assert.equal(found.http, 200);
+  assert.deepEqual(found.hits.map((x) => x.id), [1, 2], 'only maps');
+  assert.deepEqual(found.hits[0].versions, ['1.21.1', '1.20.4']);
+  assert.equal(found.hits[0].downloads, 1235);
+  assert.ok(!JSON.stringify(found).includes('secret-key'));
+  const q = new URLSearchParams(asked[0].split('?')[1]);
+  assert.equal(q.get('classId'), '17');
+  assert.equal(q.get('searchFilter'), 'parkour');
+  assert.equal(q.get('sortField'), '6');
+  assert.equal(q.get('gameVersion'), '1.21.1');
+  assert.equal(q.get('categoryId'), '250');
+  assert.equal(q.get('index'), '20');
+  // the same search again comes from the cache
+  const before = asked.length;
+  await c('maps/search', { query: 'parkour', sort: 'downloads', gameVersion: '1.21.1', category: 250, offset: 20 }, me.token);
+  assert.equal(asked.length, before);
+  assert.deepEqual((await c('maps/categories', {}, me.token)).categories.map((x) => x.name), ['Adventure', 'Parkour']);
+  const p = await c('maps/project', { id: 1 }, me.token);
+  assert.equal(p.description, '<p>Jump!</p>');
+  assert.equal(p.screenshots[0].thumb, 'https://media.forgecdn.net/s-t.png');
+  assert.equal((await c('maps/project', { id: 9 }, me.token)).http, 404, 'a mod is not a map');
+  const files = await c('maps/files', { id: 1 }, me.token);
+  assert.deepEqual(files.files[0].versions, ['1.21.1']);
+  const dl = await c('maps/download', { id: 1, fileId: 11 }, me.token);
+  assert.equal(dl.url, 'https://edge.forgecdn.net/files/1/1/map.zip');
+  assert.equal(dl.sha1, 'abc');
+  // a file of another project, and a maker who only allows downloads on CurseForge
+  assert.equal((await c('maps/download', { id: 2, fileId: 11 }, me.token)).http, 404);
+  const blocked = await c('maps/download', { id: 2, fileId: 22 }, me.token);
+  assert.equal(blocked.http, 403);
+  assert.match(blocked.url, /curseforge\.com\/minecraft\/worlds\/map-2/);
+});
+
 test('server search: names, game modes and addresses, from the built-in list and Minehut', async () => {
   const { search, score, asAddress, plainMotd, DIRECTORY } = require('../src/core/serverdir');
   assert.ok(DIRECTORY.length >= 30, 'a decent built-in list');
