@@ -21,7 +21,7 @@ const ADMINS = ['7bc9c85eab2641ebbc373a283a27a3ab', ...String(process.env.NIMBUS
 
 // Map search goes through CurseForge's official API with this key (Netlify → Site configuration →
 // Environment variables → CURSEFORGE_API_KEY). It never leaves the service.
-const curseforge = { key: process.env.CURSEFORGE_API_KEY || '' };
+const curseforge = { key: String(process.env.CURSEFORGE_API_KEY || '').trim() };
 
 export default (req) => createApi({ store: openStore(), admins: ADMINS, curseforge })(req);
 export const config = { path: '/api/*' };

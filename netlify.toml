@@ -6,7 +6,9 @@
   command = "echo 'static site, nothing to build'"
   # Only redeploy when the website or the friends service changed (cosmetic prices included):
   # launcher-only pushes would otherwise use up Netlify's monthly build allowance for nothing.
-  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ../netlify.toml"
+  # A redeploy of the same commit (Deploys → Trigger deploy, e.g. after changing an environment
+  # variable) always builds.
+  ignore = "[ \"$CACHED_COMMIT_REF\" != \"$COMMIT_REF\" ] && git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ../netlify.toml"
 
 [functions]
   directory = "netlify/functions"

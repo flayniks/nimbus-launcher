@@ -61,6 +61,7 @@ const DEFAULT_SETTINGS = {
   stagger: true,
   hoverEffect: 'lift', // lift | tilt | glow | none
   bgMotion: true,
+  motionAlways: false, // animate even when the OS asks for less motion (Windows: Animation effects off)
   // animations: launch splash
   splashParticles: true,
   splashStyle: 'spin', // spin | bounce | splash | pulse | flip | still | minimal

@@ -60,7 +60,7 @@ a { color: var(--a2); text-decoration: none; }
 /* reduced motion: from the OS or from Settings */
 body.no-anim *, body.no-anim *::before, body.no-anim *::after { animation-duration: 0.001ms !important; animation-delay: 0ms !important; transition-duration: 0.001ms !important; }
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.001ms !important; animation-delay: 0ms !important; transition-duration: 0.001ms !important; }
+  :root:not([data-motion='always']) *, :root:not([data-motion='always']) *::before, :root:not([data-motion='always']) *::after { animation-duration: 0.001ms !important; animation-delay: 0ms !important; transition-duration: 0.001ms !important; }
 }
 /* while a game runs the launcher idles: no ambient animation eating GPU time */
 body.game-running .ambient, body.game-running .ambient * { animation-play-state: paused !important; }

@@ -363,7 +363,10 @@ export function render(page) {
         row('Page change', 'How a page appears when you switch to it.', seg('pageTransition', [['rise', 'Rise'], ['fade', 'Fade'], ['slide', 'Slide'], ['zoom', 'Zoom'], ['none', 'None']], 'rise')),
         row('Lists slide in', 'Cards and rows appear one after another.', onOff('stagger')),
         row('Hover', 'What a card does under the mouse.', seg('hoverEffect', [['lift', 'Lift'], ['tilt', 'Tilt'], ['glow', 'Glow'], ['none', 'None']], 'lift')),
-        row('Moving background', 'The background drifts slowly. It always rests while you play.', onOff('bgMotion'))),
+        row('Moving background', 'The background drifts slowly. It always rests while you play.', onOff('bgMotion')),
+        ...(matchMedia('(prefers-reduced-motion: reduce)').matches
+          ? [row('Even with Windows animations off', 'Windows has its animation effects turned off on this PC, so Nimbus keeps still too. Turn this on to animate anyway.', onOff('motionAlways', false))]
+          : [])),
       demo,
       h('div.group-title', 'Launch splash'),
       card(

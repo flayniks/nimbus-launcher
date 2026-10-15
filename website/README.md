@@ -19,7 +19,7 @@ Maps in the launcher's Browse → Maps come from CurseForge's Worlds section, th
 
 The key stays on the service: launchers never see it, and the service only answers for maps (not mods or anything else on CurseForge), to signed-in Nimbus players, with answers kept for ten minutes to spare the key's quota. Never put the key in `services.json` or anywhere in the repo.
 
-After that the site redeploys whenever a push to `main` changes `website/` (launcher-only pushes are skipped, see `ignore` in `netlify.toml`, so they don't use up the free plan's monthly build credits). Check the service at `https://<site>/api/health`, which should say `{"ok":true}`.
+After that the site redeploys whenever a push to `main` changes `website/` (launcher-only pushes are skipped, see `ignore` in `netlify.toml`, so they don't use up the free plan's monthly build credits). Check the service at `https://<site>/api/health`, which should say `{"ok":true,…}`. Its `maps` field says `ready` when map search works, `no key` when `CURSEFORGE_API_KEY` isn't set (or the site hasn't redeployed since it was added), or what CurseForge said about the key.
 
 If that address says **Not Found** (Netlify's "site not found" page) the site was deleted or renamed; if it says **Site not available**, Netlify paused it for going over the free plan's credits. Friends, chat, Nimbus LAN, shared cosmetics and Nimbus coins all need it, and the launcher then says it can't reach the Nimbus online service. Import it again (steps above), or point `services.json` at its new address.
 

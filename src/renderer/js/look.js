@@ -31,6 +31,7 @@ export function applyLook(s = {}) {
   root.dataset.hover = s.hoverEffect || 'lift';
   root.dataset.bgMotion = s.bgMotion === false ? 'off' : 'on';
   document.body.classList.toggle('no-anim', s.animations === false);
+  root.dataset.motion = s.motionAlways ? 'always' : 'system';
   speed = { relaxed: 0.7, normal: 1, snappy: 1.6 }[s.animSpeed] || 1;
   api.app.setZoom((Number(s.uiScale) || 100) / 100);
   drawBackdrop(s);

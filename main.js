@@ -122,6 +122,7 @@ class LaunchSplash {
         particles: settings.splashParticles !== false,
         style: settings.splashStyle === 'cube' ? 'spin' : settings.splashStyle || 'spin',
         still: settings.animations === false,
+        motionAlways: settings.motionAlways === true,
       },
     };
     this.win = new BrowserWindow({

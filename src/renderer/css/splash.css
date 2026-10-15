@@ -54,7 +54,8 @@ body { display: grid; place-items: center; font: 13px/1.4 'Inter', 'Segoe UI Var
 @keyframes breathe { 0%, 100% { transform: scale(0.9); opacity: 0.7; } 50% { transform: scale(1.08); opacity: 1; } }
 /* the Nimbus logo in 3D: a spinning block inside a tilted halo ring */
 .scene { position: relative; width: 56px; height: 56px; transform-style: preserve-3d; animation: bob 2.4s ease-in-out infinite; }
-.cube { position: absolute; inset: 0; transform-style: preserve-3d; animation: spin 6s linear infinite; }
+/* the resting pose (and what shows when animations are off) is the logo's own angle */
+.cube { position: absolute; inset: 0; transform-style: preserve-3d; transform: rotateX(-28deg) rotateY(40deg); animation: spin 6s linear infinite; }
 @keyframes spin { from { transform: rotateX(-28deg) rotateY(0deg); } to { transform: rotateX(-28deg) rotateY(360deg); } }
 @keyframes bob { 0%, 100% { translate: 0 -4px; } 50% { translate: 0 5px; } }
 .face { position: absolute; inset: 0; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.35); backface-visibility: hidden; }
@@ -70,6 +71,7 @@ body { display: grid; place-items: center; font: 13px/1.4 'Inter', 'Segoe UI Var
   background: conic-gradient(from 0deg, #22d3ee, #a78bfa, #f472b6, #a78bfa, #22d3ee);
   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
   mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
+  transform: translateY(6px) rotateZ(-16deg) rotateX(64deg);
   animation: orbit 4s linear infinite;
 }
 @keyframes orbit { from { transform: translateY(6px) rotateZ(-16deg) rotateX(64deg) rotateZ(0deg); } to { transform: translateY(6px) rotateZ(-16deg) rotateX(64deg) rotateZ(360deg); } }
@@ -136,7 +138,8 @@ body.playing .instance { margin-top: 12px; animation: none; }
 body.playing .status { width: 80%; margin-top: 10px; animation: none; }
 .hop { display: block; border-radius: 19px 19px 8px 8px; cursor: pointer; image-rendering: pixelated; }
 body.ready .status .row span:first-child { color: #86efac; }
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; } }
+/* the OS asks for less motion (Windows: Animation effects off), unless Settings say animate anyway */
+@media (prefers-reduced-motion: reduce) { :root:not([data-motion='always']) *, :root:not([data-motion='always']) *::before, :root:not([data-motion='always']) *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; } }
 
 /* options from Settings → Animations */
 :root[data-particles='off'] .particles { display: none; }

@@ -997,6 +997,18 @@ test('friends service: maps from CurseForge, only maps, with the key kept on the
   const blocked = await c('maps/download', { id: 2, fileId: 22 }, me.token);
   assert.equal(blocked.http, 403);
   assert.match(blocked.url, /curseforge\.com\/minecraft\/worlds\/map-2/);
+  // /api/health tells whether map search works, without the key
+  const health = async (api) => (await (await api(new Request('http://x/api/health'))).json()).maps;
+  assert.equal(await health(createApi({ store: memoryStore() })), 'no key');
+  assert.equal(await health(createApi({ store: memoryStore(), fetch: fakeCf, curseforge: { key: ' secret-key\n', base: 'https://cf.test' } })), 'ready', 'a pasted key with spaces still works');
+  const refusing = createApi({ store: memoryStore(), devAuth: true, fetch: async () => new Response('', { status: 403 }), curseforge: { key: 'wrong', base: 'https://cf.refuses' } });
+  assert.match(await health(refusing), /didn't accept/);
+  assert.ok(!(await health(refusing)).includes('wrong'));
+  const r2 = call(refusing);
+  const me2 = await r2('login/finish', { dev: true, uuid: '11111111111111111111111111111111', name: 'Alex' });
+  const err = await r2('maps/search', {}, me2.token);
+  assert.equal(err.http, 502);
+  assert.match(err.error, /didn't accept the map search key/);
 });
 
 test('server search: names, game modes and addresses, from the built-in list and Minehut', async () => {

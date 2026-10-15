@@ -504,7 +504,7 @@ export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sess
     }
     const url = new URL(req.url);
     const path = url.pathname.replace(/^.*?\/api\//, '').replace(/\/+$/, '');
-    if (req.method === 'GET' && (path === '' || path === 'health')) return json({ ok: true, service: 'nimbus-friends' });
+    if (req.method === 'GET' && (path === '' || path === 'health')) return json({ ok: true, service: 'nimbus-friends', maps: await maps.status() });
     const route = routes[`${req.method} ${path}`];
     if (!route) return fail(404, 'Not found.');
     let body = {};
@@ -542,19 +542,25 @@ const CF_TTL = 10 * 60_000;
  * service; launchers get maps only (anything else on CurseForge is refused), in a small shape
  * of our own. Answers are kept for ten minutes so the key's quota lasts.
  */
+// CurseForge answers, shared by every request a warm function instance serves
+const cfCache = new Map();
+
 function curseforgeMaps({ key, base = 'https://api.curseforge.com', fetch: doFetch, now }) {
-  const cache = new Map();
+  key = String(key || '').trim();
+  const cache = cfCache;
   const notSetUp = () => json({ error: 'Map search isn\'t set up on this Nimbus service yet.', setup: true }, 503);
 
   async function cf(pathAndQuery) {
-    const hit = cache.get(pathAndQuery);
-    if (hit && now() - hit.at < CF_TTL) return hit.data;
-    const r = await doFetch(`${base.replace(/\/+$/, '')}${pathAndQuery}`, { headers: { 'x-api-key': key, accept: 'application/json' } });
+    const url = `${base.replace(/\/+$/, '')}${pathAndQuery}`;
+    const hit = cache.get(url);
+    if (hit && hit.key === key && now() - hit.at < CF_TTL) return hit.data;
+    const r = await doFetch(url, { headers: { 'x-api-key': key, accept: 'application/json' } });
     if (r.status === 404) return null;
+    if (r.status === 401 || r.status === 403) throw new Error(`CurseForge didn't accept the map search key on the Nimbus service (it answered ${r.status}).`);
     if (!r.ok) throw new Error(`CurseForge answered ${r.status}.`);
     const data = await r.json();
     if (cache.size > 300) cache.delete(cache.keys().next().value);
-    cache.set(pathAndQuery, { at: now(), data });
+    cache.set(url, { at: now(), key, data });
     return data;
   }
 
@@ -595,6 +601,16 @@ function curseforgeMaps({ key, base = 'https://api.curseforge.com', fetch: doFet
   };
 
   return {
+    /** For /api/health: whether map search works, without giving anything away about the key. */
+    async status() {
+      if (!key) return 'no key';
+      try {
+        await cf(`/v1/categories?gameId=${CF_GAME}&classId=${CF_WORLDS}`);
+        return 'ready';
+      } catch (err) {
+        return err.message || 'CurseForge did not answer.';
+      }
+    },
     search: guard(async (body) => {
       const q = new URLSearchParams({ gameId: String(CF_GAME), classId: String(CF_WORLDS), sortOrder: 'desc', pageSize: '20' });
       const query = String(body.query || '').trim().slice(0, 80);
