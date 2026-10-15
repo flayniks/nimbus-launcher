@@ -545,7 +545,7 @@ const CF_TTL = 10 * 60_000;
 // CurseForge answers, shared by every request a warm function instance serves
 const cfCache = new Map();
 
-function curseforgeMaps({ key, base = 'https://api.curseforge.com', fetch: doFetch, now }) {
+function curseforgeMaps({ key, base = 'https://api.curseforge.com', fetch: doFetch, now, defined = false, similar = [] }) {
   key = String(key || '').trim();
   const cache = cfCache;
   const notSetUp = () => json({ error: 'Map search isn\'t set up on this Nimbus service yet.', setup: true }, 503);
@@ -603,7 +603,9 @@ function curseforgeMaps({ key, base = 'https://api.curseforge.com', fetch: doFet
   return {
     /** For /api/health: whether map search works, without giving anything away about the key. */
     async status() {
-      if (!key) return 'no key';
+      // names only (never values), to tell a missing variable from a misnamed or empty one
+      if (!key && similar.length) return `no key (found ${similar.join(', ')}: name it CURSEFORGE_API_KEY)`;
+      if (!key) return defined ? 'no key (CURSEFORGE_API_KEY is empty)' : 'no key';
       try {
         await cf(`/v1/categories?gameId=${CF_GAME}&classId=${CF_WORLDS}`);
         return 'ready';

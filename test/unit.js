@@ -1000,6 +1000,8 @@ test('friends service: maps from CurseForge, only maps, with the key kept on the
   // /api/health tells whether map search works, without the key
   const health = async (api) => (await (await api(new Request('http://x/api/health'))).json()).maps;
   assert.equal(await health(createApi({ store: memoryStore() })), 'no key');
+  assert.equal(await health(createApi({ store: memoryStore(), curseforge: { key: '', similar: ['CURSEFORGE_KEY'] } })), 'no key (found CURSEFORGE_KEY: name it CURSEFORGE_API_KEY)');
+  assert.equal(await health(createApi({ store: memoryStore(), curseforge: { key: ' ', defined: true } })), 'no key (CURSEFORGE_API_KEY is empty)');
   assert.equal(await health(createApi({ store: memoryStore(), fetch: fakeCf, curseforge: { key: ' secret-key\n', base: 'https://cf.test' } })), 'ready', 'a pasted key with spaces still works');
   const refusing = createApi({ store: memoryStore(), devAuth: true, fetch: async () => new Response('', { status: 403 }), curseforge: { key: 'wrong', base: 'https://cf.refuses' } });
   assert.match(await health(refusing), /didn't accept/);
