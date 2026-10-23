@@ -1454,3 +1454,33 @@ test('player models: Verity is in the shop with its 17 faces, each with its pict
   verity.parts.forEach(find);
   assert.deepEqual([...new Set(faces)].sort((a, b) => a - b), [...Array(17).keys()]);
 });
+
+test('player models: 50 in the shop, 50,000 coins each (Verity more), with powers on several and the same prices on the service', async () => {
+  const fs = require('fs');
+  const path = require('path');
+  const root = path.join(__dirname, '..');
+  const data = JSON.parse(fs.readFileSync(path.join(root, 'mod/common/src/main/resources/assets/nimbus/cosmetics.json'), 'utf8'));
+  const models = data.items.filter((it) => it.slot === 'model');
+  assert.equal(models.length, 50);
+  assert.equal(new Set(models.map((m) => m.id)).size, 50);
+  for (const m of models) {
+    assert.equal(m.price, m.id === 'model_verity' ? 100000 : 50000, m.id);
+    assert.ok(m.m && m.m.h.length >= 1 && m.m.h.every((h) => h > 8 && h < 60), `${m.id} has a height`);
+    assert.ok(m.parts.length > 0, `${m.id} has parts`);
+    // anything that waits on a form, face or power refers to one the model has
+    const check = (p) => {
+      if (p.w) {
+        if (p.w[0] >= 0) assert.ok(p.w[0] < (m.m.forms || ['']).length, `${m.id} form`);
+        if (p.w[1] >= 0) assert.ok(p.w[1] < (m.m.faces || ['']).length, `${m.id} face`);
+        if (p.w[2] >= 0) assert.ok(m.m.power, `${m.id} power`);
+      }
+      (p.c || []).forEach(check);
+    };
+    m.parts.forEach(check);
+    for (const f of m.fx || []) if (f.w && f.w[2] >= 0) assert.ok(m.m.power, `${m.id} power effect`);
+  }
+  const powered = models.filter((m) => m.m.power || m.m.forms || m.m.faces);
+  assert.ok(powered.length >= 25, `${powered.length} models with powers`);
+  const prices = (await import(path.join(root, 'website/lib/cosmetic-prices.mjs'))).default;
+  for (const m of models) assert.equal(prices[m.id], m.price, `${m.id} on the service`);
+});
