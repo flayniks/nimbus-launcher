@@ -1481,6 +1481,6 @@ test('player models: 50 in the shop, 50,000 coins each (Verity more), with power
   }
   const powered = models.filter((m) => m.m.power || m.m.forms || m.m.faces);
   assert.ok(powered.length >= 25, `${powered.length} models with powers`);
-  const prices = (await import(path.join(root, 'website/lib/cosmetic-prices.mjs'))).default;
+  const prices = (await import('../website/lib/cosmetic-prices.mjs')).default;
   for (const m of models) assert.equal(prices[m.id], m.price, `${m.id} on the service`);
 });
