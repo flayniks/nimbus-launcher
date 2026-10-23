@@ -29,6 +29,7 @@ public final class Compat {
 	public static final int KEY_C = GLFW.GLFW_KEY_C;
 	public static final int KEY_Y = GLFW.GLFW_KEY_Y;
 	public static final int KEY_N = GLFW.GLFW_KEY_N;
+	public static final int KEY_G = GLFW.GLFW_KEY_G;
 
 	private Compat() {
 	}
@@ -85,6 +86,10 @@ public final class Compat {
 
 	public static Screen texts(Screen parent) {
 		return new TextsScreen(parent);
+	}
+
+	public static Screen powers(Screen parent) {
+		return new PowersScreen(parent);
 	}
 
 	// ---------------------------------------------------------------- pictures (menu background)
@@ -193,6 +198,100 @@ public final class Compat {
 			// no dialog on this system
 		}
 		done.accept(path);
+	}
+
+	// ---------------------------------------------------------------- player models
+
+	private static Method avatarPartShown;
+	private static boolean avatarLooked;
+
+	/**
+	 * A player's seven skin-layer switches as bits (they carry their model's state). Player had
+	 * isModelPartShown up to 1.21.8; from 1.21.9 Avatar has it, under another intermediary name.
+	 */
+	public static int modelParts(net.minecraft.world.entity.player.Player p) {
+		int bits = 0;
+		for (net.minecraft.world.entity.player.PlayerModelPart part : net.minecraft.world.entity.player.PlayerModelPart.values()) {
+			boolean on;
+			try {
+				if (avatarPartShown == null) on = p.isModelPartShown(part);
+				else on = (Boolean) avatarPartShown.invoke(p, part);
+			} catch (NoSuchMethodError e) {
+				if (avatarLooked) return 127;
+				avatarLooked = true;
+				avatarPartShown = findPartShown(p.getClass());
+				if (avatarPartShown == null) return 127;
+				return modelParts(p);
+			} catch (Throwable t) {
+				return 127;
+			}
+			if (on) bits |= part.getMask();
+		}
+		return bits;
+	}
+
+	private static Method findPartShown(Class<?> c) {
+		for (Class<?> k = c; k != null; k = k.getSuperclass()) {
+			for (Method m : k.getDeclaredMethods()) {
+				Class<?>[] ps = m.getParameterTypes();
+				if (m.getReturnType() == boolean.class && ps.length == 1 && ps[0] == net.minecraft.world.entity.player.PlayerModelPart.class
+					&& (m.getName().equals("method_74091") || m.getName().equals("isModelPartShown"))) {
+					m.setAccessible(true);
+					return m;
+				}
+			}
+		}
+		return null;
+	}
+
+	/** How far into a swing of the arm a player is, 0 to 1. */
+	public static float attackAnim(net.minecraft.world.entity.player.Player p, float pt) {
+		return p.getAttackAnim(pt);
+	}
+
+	// ---------------------------------------------------------------- player models (1.21.2+)
+
+	private static java.lang.reflect.Field stateScale;
+	private static java.lang.reflect.Field stateName;
+	private static boolean stateLooked;
+
+	/**
+	 * A player wearing a player model: their render state gets a tiny scale (nothing of theirs is
+	 * drawn but the name) and the name goes up above the model. Fields by intermediary name
+	 * (LivingEntityRenderState.scale, EntityRenderState.nameTagAttachment).
+	 */
+	public static void hideForModel(Object entity, Object state) {
+		try {
+			if (!Cosmetics.hidesVanilla(entity)) return;
+			if (!stateLooked) {
+				stateLooked = true;
+				stateScale = field(state.getClass(), "field_53453", "scale");
+				stateName = field(state.getClass(), "field_53338", "nameTagAttachment");
+			}
+			if (stateScale != null) stateScale.setFloat(state, 1e-4f);
+			double top = Cosmetics.modelTop(entity);
+			if (stateName != null && top > 0) {
+				Object v = stateName.get(state);
+				if (v instanceof net.minecraft.world.phys.Vec3 at && at.y < top + 0.25) stateName.set(state, new net.minecraft.world.phys.Vec3(at.x, top + 0.25, at.z));
+			}
+		} catch (Throwable ignored) {
+			// drawn as usual
+		}
+	}
+
+	private static java.lang.reflect.Field field(Class<?> c, String... names) {
+		for (Class<?> k = c; k != null; k = k.getSuperclass()) {
+			for (String n : names) {
+				try {
+					java.lang.reflect.Field f = k.getDeclaredField(n);
+					f.setAccessible(true);
+					return f;
+				} catch (NoSuchFieldException ignored) {
+					// the next name
+				}
+			}
+		}
+		return null;
 	}
 
 	// ---------------------------------------------------------------- cosmetics (1.21.9+ path)

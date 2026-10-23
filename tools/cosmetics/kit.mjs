@@ -2,12 +2,36 @@
 // animate, and a few shape helpers. build.mjs turns everything into cosmetics.json, which Nimbus Core
 // draws in game and the launcher draws in its previews. Both read the same format:
 //
-//   part  { p:[x,y,z] pivot, r:[x,y,z] degrees, s: scale, a:[anims], b:[boxes], c:[parts] }
+//   part  { p:[x,y,z] pivot, r:[x,y,z] degrees, s: scale, a:[anims], b:[boxes], g:[shapes], c:[parts],
+//           k: role, w:[form, face, power] }
+//   shape (smooth, for the models that need more than blocks):
+//         {t:'ball', c:[x,y,z], r:[rx,ry,rz], col, f, tex, n}   an ellipsoid, its poles on z; with
+//           a texture, the front half shows the picture as seen from the front (the whole square
+//           over the whole half) and the back half the picture's top-left pixel
+//           (tp:[x, z] makes it wider at the top, > 0, or the bottom, < 0: eggs and beans;
+//           wrap: 1 wraps the picture all the way round instead, for skin; half: 1 is only the
+//           front half, for a face over a ball just inside it)
+//         {t:'limb', a:[x,y,z], b:[x,y,z], r:[r0,r1], col, f, tex, n}  a tapered tube from a to b,
+//           a picture wrapped round it once (across) and along it once
+//         col: colour 0xRRGGBB (white under a texture), f: flags as for boxes, tex: a picture in
+//         art/ ('verity_face_normal' is art/verity/face_normal.png), n: how many sides
+//         k (player models only): how the part follows the player. 'head' turns and tilts with
+//           where they look; 'armL' 'armR' 'legL' 'legR' swing when they walk (L is the model's
+//           left, +x); 'body' leans when they sneak; 'tail' wags faster when they move; 'hop'
+//           bounces along when they move (slimes); 'look' is 'head' for models that are all head
+//           (floating balls); 'lean' tips forward the faster they go.
+//         w (player models only): the part only shows in that form / with that face / with the
+//           power on (or off: 0); -1 is any.
 //   box   [x, y, z, w, h, d, colour 0xRRGGBB or 0xAARRGGBB, flags, faces]
 //         flags: 1 glows, 2 see-through (uses the alpha), 4 rainbow, 8 flickers
 //         faces: which sides to draw, bits -x +x -y +y -z +z (63 = all)
 //   anim  {t:'spin'|'sway'|'flap'|'bob'|'orbit'|'pulse'|'hop'|'trick'|'twitch', ...}
-//   fx    {k: kind, at:[x,y,z], rate, v:[x,y,z], sp, life, g, sz, c:[colours]}
+//   fx    {k: kind, at:[x,y,z], rate, v:[x,y,z], sp, life, g, sz, c:[colours], w:[form, face, power]}
+//
+// A player model (slot 'model') stands in for the player: feet at y = 0, facing +z, about 32
+// pixels tall like the player. Its item has m: { h: height in pixels, forms:[names], faces:[names],
+// power: name, bg: colour behind the face pictures }; forms, faces and the power are its powers,
+// switched in game (G) and seen by everyone.
 
 export const GLOW = 1;
 export const SEE = 2;
@@ -189,11 +213,18 @@ export class Vox {
     return Boolean(v && !(v.f & (GLOW | SEE)) && (v.c >>> 24 === 0 || v.c >>> 24 === 255));
   }
 
+  /** Whether a cell is filled, at all. */
+  has(x, y, z) {
+    return this.cells.has(this.key(x, y, z));
+  }
+
   /**
    * The boxes: runs of one colour along x, stacked up along y where they line up, with every
    * face that solid neighbours cover completely left out.
    */
-  boxes() {
+  boxes(occlude = null) {
+    // faces against cells of `occlude` (another grid drawn in the same place) are hidden too
+    const solid = occlude ? (x, y, z) => this.solid(x, y, z) || occlude.solid(x, y, z) : (x, y, z) => this.solid(x, y, z);
     const runs = [];
     const rows = new Map();
     for (const v of this.cells.values()) {
@@ -237,16 +268,16 @@ export class Vox {
         return true;
       };
       const side = (x) => {
-        for (let y = b.y0; y <= b.y1; y++) if (!this.solid(x, y, b.z)) return false;
+        for (let y = b.y0; y <= b.y1; y++) if (!solid(x, y, b.z)) return false;
         return true;
       };
       let mask = 0;
       if (open || !side(b.x0 - 1)) mask |= 1;
       if (open || !side(b.x1 + 1)) mask |= 2;
-      if (open || !all((x) => this.solid(x, b.y0 - 1, b.z))) mask |= 4;
-      if (open || !all((x) => this.solid(x, b.y1 + 1, b.z))) mask |= 8;
-      if (open || !all((x, y) => this.solid(x, y, b.z - 1))) mask |= 16;
-      if (open || !all((x, y) => this.solid(x, y, b.z + 1))) mask |= 32;
+      if (open || !all((x) => solid(x, b.y0 - 1, b.z))) mask |= 4;
+      if (open || !all((x) => solid(x, b.y1 + 1, b.z))) mask |= 8;
+      if (open || !all((x, y) => solid(x, y, b.z - 1))) mask |= 16;
+      if (open || !all((x, y) => solid(x, y, b.z + 1))) mask |= 32;
       if (mask) out.push([b.x0, b.y0, b.z, b.x1 - b.x0 + 1, b.y1 - b.y0 + 1, 1, b.c, b.f, mask]);
     }
     return out;
@@ -256,16 +287,27 @@ export class Vox {
 // ------------------------------------------------------------------ parts
 
 /** A part: boxes from voxels (or a list), a pivot, a base rotation and animations. */
-export function part({ p = [0, 0, 0], r, s, a, vox, b, c } = {}) {
+export function part({ p = [0, 0, 0], r, s, a, vox, b, g, c, k, when, occlude } = {}) {
   const out = { p };
   if (r && (r[0] || r[1] || r[2])) out.r = r;
   if (s && s !== 1) out.s = s;
   if (a && a.length) out.a = a;
-  const boxes = [...(b || []), ...(vox ? vox.boxes() : [])];
+  if (k) out.k = k;
+  if (when) out.w = [when.form ?? -1, when.face ?? -1, when.power ?? -1];
+  const boxes = [...(b || []), ...(vox ? vox.boxes(occlude) : [])];
   if (boxes.length) out.b = boxes;
+  if (g && g.length) out.g = g;
   if (c && c.length) out.c = c;
   return out;
 }
+
+// smooth shapes
+export const ball = (c, r, col, { f = 0, tex = null, n = 20, taper = null, wrap = false, half = false } = {}) => {
+  const rr = typeof r === 'number' ? [r, r, r] : r;
+  const tp = taper === null ? null : typeof taper === 'number' ? [taper, taper] : taper;
+  return { t: 'ball', c, r: rr, col: tex ? 0xffffff : rgb(col), f, ...(tex ? { tex } : {}), ...(tp ? { tp } : {}), ...(wrap ? { wrap: 1 } : {}), ...(half ? { half: 1 } : {}), n };
+};
+export const limb = (a, b, r0, r1 = r0, col = 0xffffff, { f = 0, n = 10, tex = null } = {}) => ({ t: 'limb', a, b, r: [r0, r1], col: tex ? 0xffffff : rgb(col), f, ...(tex ? { tex } : {}), n });
 
 // animation shorthands
 export const spin = (ax, sp, ph = 0) => ({ t: 'spin', ax, sp, ph });
@@ -279,4 +321,4 @@ export const trick = (ax, every, dur, ph = 0) => ({ t: 'trick', ax, every, dur, 
 export const twitch = (ax, amp, every, dur = 0.25, ph = 0) => ({ t: 'twitch', ax, amp, every, dur, ph });
 
 /** A particle stream. */
-export const fx = (k, o = {}) => ({ k, at: o.at || [0, 0, 0], rate: o.rate ?? 4, v: o.v || [0, 6, 0], sp: o.sp ?? 3, life: o.life ?? 1.2, g: o.g ?? 0, sz: o.sz ?? 1, c: (o.c || [0xffffff]).map(rgb), ...(o.glow === false ? { solid: 1 } : {}) });
+export const fx = (k, o = {}) => ({ k, at: o.at || [0, 0, 0], rate: o.rate ?? 4, v: o.v || [0, 6, 0], sp: o.sp ?? 3, life: o.life ?? 1.2, g: o.g ?? 0, sz: o.sz ?? 1, c: (o.c || [0xffffff]).map(rgb), ...(o.glow === false ? { solid: 1 } : {}), ...(o.when ? { w: [o.when.form ?? -1, o.when.face ?? -1, o.when.power ?? -1] } : {}) });

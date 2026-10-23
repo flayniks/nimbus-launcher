@@ -12,7 +12,7 @@ const path = require('path');
 const { readJson, writeJson } = require('./util');
 const CATALOG = require('./cosmetics-catalog.json'); // id -> { slot, price }, from tools/cosmetics/build.mjs
 
-const SLOTS = ['hat', 'pet', 'wings', 'aura'];
+const SLOTS = ['hat', 'pet', 'wings', 'aura', 'model'];
 const ID = /^[a-z0-9_]{2,40}$/;
 const RETRY_MIN = 30_000;
 const RETRY_MAX = 5 * 60_000;
@@ -47,7 +47,7 @@ class Cosmetics extends EventEmitter {
     this.gameFile = launcher.paths.cosmetics;
     this.progressFile = launcher.paths.progress || null;
     this.tasksFile = launcher.paths.tasks || null;
-    this.worn = { hat: null, pet: null, wings: null, aura: null };
+    this.worn = { hat: null, pet: null, wings: null, aura: null, model: null };
     this.wallets = {}; // the last wallet seen, per account
     this.who = null; // the account this.wallet belongs to
     this.wallet = null;

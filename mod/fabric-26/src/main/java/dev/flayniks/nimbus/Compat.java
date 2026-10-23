@@ -26,6 +26,7 @@ public final class Compat {
 	public static final int KEY_C = 67;
 	public static final int KEY_Y = 89;
 	public static final int KEY_N = 78;
+	public static final int KEY_G = 71;
 
 	private static Method legacyIsKeyDown;
 	private static boolean sdl = true;
@@ -77,6 +78,7 @@ public final class Compat {
 			case 67 -> 6; // C
 			case 89 -> 28; // Y
 			case 78 -> 17; // N
+			case 71 -> 10; // G (player model powers)
 			case 297 -> 65; // F8 (replay clips)
 			case 257 -> 40; // Enter
 			case 335 -> 88; // keypad Enter
@@ -139,6 +141,40 @@ public final class Compat {
 		return new TextsScreen(parent);
 	}
 
+	public static Screen powers(Screen parent) {
+		return new PowersScreen(parent);
+	}
+
+	private static java.lang.reflect.Field swingState;
+	private static java.lang.reflect.Method swingAnimation;
+	private static boolean swingLooked;
+
+	/** A player's seven skin-layer switches as bits (they carry their model's state). */
+	public static int modelParts(net.minecraft.world.entity.player.Player p) {
+		int bits = 0;
+		try {
+			for (net.minecraft.world.entity.player.PlayerModelPart part : net.minecraft.world.entity.player.PlayerModelPart.values()) if (p.isModelPartShown(part)) bits |= part.getMask();
+		} catch (Throwable t) {
+			return 127;
+		}
+		return bits;
+	}
+
+	/** How far into a swing of the arm a player is, 0 to 1 (26.x keeps it in a private SwingState). */
+	public static float attackAnim(net.minecraft.world.entity.player.Player p, float pt) {
+		try {
+			if (!swingLooked) {
+				swingLooked = true;
+				swingState = net.minecraft.world.entity.LivingEntity.class.getDeclaredField("swingState");
+				swingState.setAccessible(true);
+				swingAnimation = swingState.getType().getMethod("getAnimation", float.class);
+			}
+			return swingState == null ? 0f : (Float) swingAnimation.invoke(swingState.get(p), pt);
+		} catch (Throwable t) {
+			return 0f;
+		}
+	}
+
 	// ---------------------------------------------------------------- pictures (menu background)
 
 	/** The window's size in real pixels. */
@@ -160,6 +196,11 @@ public final class Compat {
 	}
 
 	/** Draws a whole texture over the screen, w x h in GUI units. */
+	/** A whole texture over [x, x+w) x [y, y+h). */
+	public static void blit(Object graphics, Object id, int x, int y, int w, int h) {
+		((GuiGraphicsExtractor) graphics).blit((Identifier) id, x, y, x + w, y + h, 0f, 1f, 0f, 1f);
+	}
+
 	public static void blitFull(Object graphics, Object id, int w, int h, int texW, int texH) {
 		((GuiGraphicsExtractor) graphics).blit((Identifier) id, 0, 0, w, h, 0f, 1f, 0f, 1f);
 	}

@@ -34,6 +34,13 @@ public final class GuiCanvas implements Canvas {
 	}
 
 	@Override
+	public void picture(String name, int x, int y, int w, int h) {
+		Object id = CosmeticsDraw.texture(name);
+		if (id == null || w <= 0 || h <= 0) return;
+		Compat.blit(g, id, x, y, w, h);
+	}
+
+	@Override
 	public void push(float x, float y, float scale) {
 		g.pose().pushMatrix();
 		g.pose().translate(x, y);

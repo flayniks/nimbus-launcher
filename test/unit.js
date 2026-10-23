@@ -710,10 +710,10 @@ test('friends service: cosmetics are saved by their owner and anyone can look th
   assert.equal((await call('cosmetics/set', { hat: 'Crown Royal!' }, alex.token)).http, 400);
   // what isn't unlocked yet (or free) isn't shown to others
   const set = await call('cosmetics/set', { hat: 'tophat_classic', pet: 'dragon_ember', wings: null, aura: 'aura_runes' }, alex.token);
-  assert.deepEqual(set.worn, { hat: 'tophat_classic', pet: null, wings: null, aura: null });
+  assert.deepEqual(set.worn, { hat: 'tophat_classic', pet: null, wings: null, aura: null, model: null });
   assert.deepEqual(set.locked, ['dragon_ember', 'aura_runes']);
   await store.set('wallet/11111111111111111111111111111111', { coins: 0, owned: ['dragon_ember', 'aura_runes'] });
-  assert.deepEqual((await call('cosmetics/set', { hat: 'tophat_classic', pet: 'dragon_ember', wings: null, aura: 'aura_runes' }, alex.token)).worn, { hat: 'tophat_classic', pet: 'dragon_ember', wings: null, aura: 'aura_runes' });
+  assert.deepEqual((await call('cosmetics/set', { hat: 'tophat_classic', pet: 'dragon_ember', wings: null, aura: 'aura_runes' }, alex.token)).worn, { hat: 'tophat_classic', pet: 'dragon_ember', wings: null, aura: 'aura_runes', model: null });
   // anyone can look, by uuid (dashes or not) or by name on offline-mode servers
   const got = await call('cosmetics/get', { players: [{ uuid: '11111111-1111-1111-1111-111111111111' }, { uuid: '99999999999999999999999999999999', name: 'alex' }, { uuid: '22222222222222222222222222222222', name: 'Nobody' }] });
   assert.equal(got.http, 200);
@@ -803,7 +803,7 @@ test('friends service: every Nimbus player gets the badge, renamed or with nothi
     { uuid: '99999999999999999999999999999999', name: 'alex' }, // by name
     { uuid: '88888888888888888888888888888888', name: 'Nobody' },
   ] });
-  assert.deepEqual(got.cosmetics[ALEX], { hat: null, pet: null, wings: null, aura: null });
+  assert.deepEqual(got.cosmetics[ALEX], { hat: null, pet: null, wings: null, aura: null, model: null });
   assert.ok(got.cosmetics[offlineUuid('Steve')], 'found by the offline-mode uuid');
   assert.ok(got.cosmetics['99999999999999999999999999999999'], 'found by name');
   assert.equal(got.cosmetics['88888888888888888888888888888888'], undefined);
@@ -855,6 +855,21 @@ test('friends service: every Nimbus player gets the badge, renamed or with nothi
   assert.equal((await call('login/finish', { dev: true, uuid: '44444444444444444444444444444444', name: 'Griefer' })).http, 403);
   assert.equal((await call('admin/unban', { uuid: '44444444444444444444444444444444' }, admin.token)).http, 200);
   assert.equal((await call('login/finish', { dev: true, uuid: '44444444444444444444444444444444', name: 'Griefer' })).http, 200);
+  // coins from an admin: given (with a note the player sees once), taken, never below zero
+  assert.equal((await call('admin/coins', { uuid: STEVE, amount: 100 }, alex.token)).http, 403);
+  assert.equal((await call('admin/coins', { uuid: STEVE, amount: 0 }, admin.token)).http, 400);
+  const before = (await call('coins/state', {}, steve.token)).coins;
+  const gift = await call('admin/coins', { name: 'Steve', amount: 50000, note: 'for Verity' }, admin.token);
+  assert.equal(gift.http, 200);
+  assert.equal(gift.change, 50000);
+  const after = await call('coins/state', {}, steve.token);
+  assert.equal(after.coins, before + 50000);
+  assert.ok(after.events.some((e) => e.type === 'gift' && e.coins === 50000 && e.title === 'Gift from Its_Flayniks: for Verity'));
+  assert.ok(!(await call('coins/state', {}, steve.token)).events.some((e) => e.type === 'gift'), 'shown once');
+  const took = await call('admin/coins', { uuid: STEVE, amount: -10_000_000 }, admin.token);
+  assert.equal(took.coins, 0);
+  assert.equal(took.change, -(before + 50000));
+  assert.equal((await call('admin/users', {}, admin.token)).users.find((u) => u.name === 'Steve').coins, 0);
 });
 
 test('maps: a map zip unpacks into saves, however it is packed, and nothing escapes the folder', async () => {
@@ -1178,7 +1193,7 @@ test('cosmetics: what you wear is saved, written for the game and shared; locked
   // today's tasks are written for the game
   assert.equal(JSON.parse(fs.readFileSync(launcher.paths.tasks, 'utf8')).tasks[0].stat, 'mine');
   await new Promise((r) => setTimeout(r, 20));
-  assert.deepEqual(calls.filter(([p]) => p === 'cosmetics/set').at(-1)[1], { hat: 'halo_angel', pet: 'bee', wings: null, aura: null });
+  assert.deepEqual(calls.filter(([p]) => p === 'cosmetics/set').at(-1)[1], { hat: 'halo_angel', pet: 'bee', wings: null, aura: null, model: null });
   assert.equal(c.state().sync.state, 'shared');
   // what the game counted goes to the service once, and what it pays is passed on
   fs.writeFileSync(launcher.paths.progress, JSON.stringify({ day: '2026-09-27', stats: { mine: 70 } }));
@@ -1408,4 +1423,34 @@ test('import: reads CurseForge, Prism/MultiMC, ATLauncher and Modrinth App insta
   assert.ok(!fs.existsSync(path.join(dest, 'logs')));
   assert.ok(!fs.existsSync(path.join(dest, 'minecraftinstance.json')));
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('player models: Verity is in the shop with its 17 faces, each with its picture in the game and the launcher', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const root = path.join(__dirname, '..');
+  const data = JSON.parse(fs.readFileSync(path.join(root, 'mod/common/src/main/resources/assets/nimbus/cosmetics.json'), 'utf8'));
+  const verity = data.items.find((it) => it.id === 'model_verity');
+  assert.ok(verity, 'in the catalogue');
+  assert.equal(verity.slot, 'model');
+  assert.equal(verity.price, 100000);
+  assert.equal(verity.m.faces.length, 17);
+  assert.equal(verity.m.power, 'Glitch');
+  // the most expensive thing in the shop
+  assert.equal(Math.max(...data.items.map((it) => it.price)), verity.price);
+  assert.equal(require('../src/core/cosmetics-catalog.json').model_verity.price, 100000);
+  // every face has a picture, in both places
+  const textures = new Set();
+  const walk = (p) => { for (const g of p.g || []) if (g.tex) textures.add(g.tex); (p.c || []).forEach(walk); };
+  verity.parts.forEach(walk);
+  assert.equal(textures.size, 17);
+  for (const t of textures) {
+    assert.ok(fs.existsSync(path.join(root, 'mod/common/src/main/resources/assets/nimbus/textures/models', `${t}.png`)), `${t} in the mod`);
+    assert.ok(fs.existsSync(path.join(root, 'src/renderer/img/models', `${t}.png`)), `${t} in the launcher`);
+  }
+  // each face shows only with its own face picked
+  const faces = [];
+  const find = (p) => { if (p.w && p.w[1] >= 0) faces.push(p.w[1]); (p.c || []).forEach(find); };
+  verity.parts.forEach(find);
+  assert.deepEqual([...new Set(faces)].sort((a, b) => a - b), [...Array(17).keys()]);
 });

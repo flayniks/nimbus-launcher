@@ -256,6 +256,7 @@ class Friends extends EventEmitter {
   adminUsers() { return this.call('admin/users', {}); }
   adminBan(target, reason, days) { return this.call('admin/ban', { ...target, reason, days }); }
   adminUnban(uuid) { return this.call('admin/unban', { uuid }); }
+  adminCoins(target, amount, note) { return this.call('admin/coins', { ...target, amount, note }); }
 
   // ---- actions
   async add(name) { const r = await this.call('friends/add', { name }); this.schedule(100); return r; }

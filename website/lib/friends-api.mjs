@@ -10,7 +10,7 @@ const ONLINE_MS = 90_000;
 const SESSION_MS = 30 * 24 * 3600_000;
 const CHAT_KEEP = 200;
 const RELAY_TYPES = new Set(['join-request', 'join-reply', 'join-cancel', 'signal']);
-const COSMETIC_SLOTS = ['hat', 'pet', 'wings', 'aura'];
+const COSMETIC_SLOTS = ['hat', 'pet', 'wings', 'aura', 'model'];
 // pictures in chat: base64, checked by their first bytes; ~1.1 MB at most (the launcher sends less)
 const IMAGE_TYPES = { 'image/jpeg': { magic: '/9j/' }, 'image/webp': { magic: 'UklGR' }, 'image/png': { magic: 'iVBORw0KGgo' } };
 const IMAGE_MAX = 1_500_000;
@@ -132,6 +132,22 @@ export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sess
     if (!r.ok) throw new Error('Mojang did not answer. Try again in a moment.');
     const p = await r.json();
     return { uuid: cleanUuid(p.id), name: p.name };
+  }
+
+  /** Who an admin action is about: {uuid} (with an optional name) or a Minecraft {name}. */
+  async function adminTarget(body) {
+    if (body.uuid) {
+      const uuid = cleanUuid(body.uuid);
+      if (!validUuid(uuid)) return fail(400, 'Bad uuid.');
+      return { uuid, name: (await user(uuid))?.name || String(body.name || '').slice(0, 16) || uuid };
+    }
+    const name = String(body.name || '').trim();
+    if (!/^[A-Za-z0-9_]{1,16}$/.test(name)) return fail(400, 'That is not a Minecraft name.');
+    // Nimbus players by the name they last used, then anyone on Mojang
+    const known = await store.get(`username/${name.toLowerCase()}`);
+    if (known?.uuid) return { uuid: known.uuid, name: (await user(known.uuid))?.name || name };
+    const target = await lookupName(name);
+    return target || fail(404, `There is no Minecraft player called ${name}.`);
   }
 
   async function wallet(uuid) {
@@ -417,17 +433,8 @@ export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sess
       });
     },
     'POST admin/ban': async (req, body, who) => {
-      let target = null;
-      if (body.uuid) {
-        const uuid = cleanUuid(body.uuid);
-        if (!validUuid(uuid)) return fail(400, 'Bad uuid.');
-        target = { uuid, name: (await user(uuid))?.name || String(body.name || '').slice(0, 16) || uuid };
-      } else {
-        const name = String(body.name || '').trim();
-        if (!/^[A-Za-z0-9_]{1,16}$/.test(name)) return fail(400, 'That is not a Minecraft name.');
-        target = await lookupName(name);
-        if (!target) return fail(404, `There is no Minecraft player called ${name}.`);
-      }
+      const target = await adminTarget(body);
+      if (target instanceof Response) return target;
       if (isAdmin(target.uuid)) return fail(400, target.uuid === who.uuid ? "You can't ban yourself." : "Admins can't be banned.");
       const days = Number(body.days) || 0;
       const ban = {
@@ -442,6 +449,20 @@ export function createApi({ store, fetch: doFetch = fetch, devAuth = false, sess
       const installs = (await store.get(`installs/${target.uuid}`))?.ids || [];
       for (const id of installs) await store.set(`baninstall/${id}`, { ...ban, uuid: target.uuid });
       return json({ ok: true, uuid: target.uuid, name: target.name, installs: installs.length, ban: banView(ban) });
+    },
+    // coins to give (or, below zero, to take): they arrive with the player's next coin update
+    'POST admin/coins': async (req, body, who) => {
+      const target = await adminTarget(body);
+      if (target instanceof Response) return target;
+      const amount = Math.trunc(Number(body.amount));
+      if (!Number.isFinite(amount) || amount === 0 || Math.abs(amount) > 10_000_000) return fail(400, 'Give a number of coins, up to 10,000,000.');
+      const w = await wallet(target.uuid);
+      const before = w.coins;
+      w.coins = Math.max(0, w.coins + amount);
+      const change = w.coins - before;
+      if (change > 0) w.gifts = [...(w.gifts || []), { coins: change, by: who.name, note: String(body.note || '').trim().slice(0, 80) || null, at: now() }].slice(-20);
+      await store.set(`wallet/${target.uuid}`, w);
+      return json({ ok: true, uuid: target.uuid, name: target.name, coins: w.coins, change });
     },
     'POST admin/unban': async (req, body) => {
       const uuid = cleanUuid(body.uuid);

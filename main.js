@@ -887,6 +887,10 @@ function registerIpc() {
     return friends.adminBan(t.uuid ? { uuid: String(t.uuid), name: String(t.name || '') } : { name: String(t.name || '') }, String(reason || ''), Number(days) || 0);
   });
   handle('admin:unban', (uuid) => friends.adminUnban(String(uuid || '')));
+  handle('admin:coins', (target, amount, note) => {
+    const t = target && typeof target === 'object' ? target : {};
+    return friends.adminCoins(t.uuid ? { uuid: String(t.uuid), name: String(t.name || '') } : { name: String(t.name || '') }, Math.trunc(Number(amount)) || 0, String(note || ''));
+  });
   handle('friends:copyImage', async (id) => {
     const img = nativeImage.createFromDataURL(await friends.image(String(id || '')));
     await clipboard.write([new ClipboardItem({ 'image/png': new Blob([img.toPNG()], { type: 'image/png' }) })]);

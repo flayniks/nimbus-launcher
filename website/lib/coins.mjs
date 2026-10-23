@@ -133,6 +133,9 @@ export function settle(w, uuid, now, report = null) {
     delete w.fresh;
     events.push({ type: 'welcome', id: null, title: 'Welcome to Nimbus coins', coins: REWARDS.welcome });
   }
+  // coins a Nimbus admin gave (already in the balance): shown once
+  for (const g of w.gifts || []) events.push({ type: 'gift', id: null, title: g.note ? `Gift from ${g.by}: ${g.note}` : `Gift from ${g.by}`, coins: g.coins });
+  delete w.gifts;
   const today = dayOf(now);
   if (w.day !== today) Object.assign(w, { day: today, stats: {}, done: [], bonus: false, playPaid: 0 });
 

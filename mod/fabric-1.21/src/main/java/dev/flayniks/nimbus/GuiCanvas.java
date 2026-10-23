@@ -80,6 +80,19 @@ public final class GuiCanvas implements Canvas {
 	}
 
 	@Override
+	public void picture(String name, int x, int y, int w, int h) {
+		Object id = CosmeticsDraw.texture(name);
+		if (id == null || w <= 0 || h <= 0) return;
+		push(x, y, 1f);
+		try {
+			Compat.blitFull(g, id, w, h, w, h);
+		} catch (Throwable ignored) {
+			// no picture then
+		}
+		pop();
+	}
+
+	@Override
 	public void push(float x, float y, float scale) {
 		Object p = pose(g);
 		if (p instanceof PoseStack ps) {

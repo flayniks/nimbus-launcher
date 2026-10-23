@@ -19,6 +19,8 @@ const extraMods = (flag('mods') || '').split(',').filter(Boolean);
 const addFiles = (flag('addfile') || '').split(',').filter(Boolean).map((s) => s.split(/:(.+)/));
 const shotsDir = flag('shots');
 const extraJvm = (flag('jvm') || '').split(' ').filter(Boolean);
+// --world=<folder> copies a world in and opens it straight away (Quick Play)
+const world = flag('world');
 
 (async () => {
   const root = path.join(__dirname, '.data');
@@ -49,6 +51,7 @@ const extraJvm = (flag('jvm') || '').split(' ').filter(Boolean);
     fs.mkdirSync(path.join(launcher.paths.gameDir(inst.id), 'mods'), { recursive: true });
     fs.copyFileSync(jar, path.join(launcher.paths.gameDir(inst.id), 'mods', path.basename(jar)));
   }
+  if (world) fs.cpSync(world, path.join(launcher.paths.gameDir(inst.id), 'saves', path.basename(world)), { recursive: true });
   // --options=key:value,key:value seeds options.txt (e.g. onboardAccessibility:false to reach the title screen)
   const seed = (flag('options') || '').split(',').filter(Boolean);
   if (seed.length) fs.writeFileSync(path.join(launcher.paths.gameDir(inst.id), 'options.txt'), `${seed.join('\n')}\n`);
@@ -63,7 +66,8 @@ const extraJvm = (flag('jvm') || '').split(' ').filter(Boolean);
     gameDir: prep.gameDir, gameAssets: prep.gameAssets, clientId: 'smoke',
     extraJvm: [...boost.launchJvmFlags({ instance: prep.instance, javaMajor: prep.java.major, modCount: 0 }), ...extraJvm],
   });
-  const child = spawn(prep.java.bin, [...built.jvm, built.mainClass, ...built.game], { cwd: prep.gameDir });
+  const game = world ? [...built.game, '--quickPlaySingleplayer', path.basename(world)] : built.game;
+  const child = spawn(prep.java.bin, [...built.jvm, built.mainClass, ...game], { cwd: prep.gameDir });
   const out = [];
   const parser = new LogParser();
   const onData = (d) => {

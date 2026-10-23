@@ -184,6 +184,7 @@ contextBridge.exposeInMainWorld('nimbus', {
     users: () => call('admin:users'),
     ban: (target, reason, days) => call('admin:ban', target, reason, days),
     unban: (uuid) => call('admin:unban', uuid),
+    coins: (target, amount, note) => call('admin:coins', target, amount, note),
   },
   updates: {
     state: () => call('update:state'),

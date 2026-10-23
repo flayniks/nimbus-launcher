@@ -1,4 +1,4 @@
-// Admin: everyone who uses Nimbus, live, and bans. Only shown to Nimbus admins; the service
+// Admin: everyone who uses Nimbus, live, bans and coin gifts. Only shown to Nimbus admins; the service
 // checks every call on its own, so this page is just the way in.
 import { h, icon, clear, fail, ok, modal, segmented, fmtAgo } from '../ui.js';
 import { api, store } from '../store.js';
@@ -33,6 +33,7 @@ export function render(page) {
       h('div', h('h1', 'Admin'), h('p', 'Everyone who uses Nimbus Launcher. Only Nimbus admins can see this page.')),
       h('div.spacer'),
       h('button.btn', { icon: 'refresh', onclick: () => load() }, 'Refresh'),
+      h('button.btn', { icon: 'coin', onclick: () => coinsDialog(null) }, 'Give coins'),
       h('button.btn.danger', { icon: 'lock', onclick: () => banDialog(null) }, 'Ban by name')),
     stats,
     h('div.sv-search', icon('search'), search),
@@ -64,6 +65,7 @@ export function render(page) {
       : u.banned
         ? h('button.btn.sm', { icon: 'refresh', onclick: () => unban(u) }, 'Unban')
         : h('button.btn.sm.danger', { icon: 'lock', onclick: () => banDialog(u) }, 'Ban');
+    const gift = h('button.btn.sm', { icon: 'coin', title: `Give ${u.name} coins (or take some)`, onclick: () => coinsDialog(u) }, 'Coins');
     const copy = h('button.btn.ghost.icon.sm', { icon: 'copy', title: 'Copy the uuid' });
     copy.onclick = () => navigator.clipboard.writeText(u.uuid).then(() => ok('Uuid copied', u.uuid)).catch(() => {});
     return h(`div.ad-row${u.online ? '.online' : ''}${u.banned ? '.banned' : ''}`,
@@ -77,7 +79,7 @@ export function render(page) {
         h('span', { title: 'Nimbus coins' }, icon('coin'), u.coins == null ? '–' : fmt(u.coins)),
         h('span', { title: 'Launcher installs this account used' }, icon('monitor'), String(u.installs || 0)),
         h('span', { title: 'Started using Nimbus' }, icon('clock'), u.joined ? new Date(u.joined).toLocaleDateString() : '–')),
-      h('div.ad-act', action));
+      h('div.ad-act', gift, action));
   }
 
   function draw() {
@@ -132,6 +134,56 @@ export function render(page) {
     };
     go.onclick = submit;
     for (const el of [name, reason]) el.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+  }
+
+  function coinsDialog(u) {
+    const name = h('input.input', { placeholder: 'Their Minecraft name', maxLength: 16, spellcheck: false });
+    const amount = h('input.input', { type: 'number', min: 1, max: 10000000, step: 1, placeholder: 'How many coins', value: '50000' });
+    const note = h('input.input', { placeholder: 'A note (they see this, optional)', maxLength: 80 });
+    let take = false;
+    const mode = segmented([{ value: 'give', label: 'Give' }, { value: 'take', label: 'Take away' }], 'give', (v) => { take = v === 'take'; label(); });
+    const quick = h('div.ad-quick', ...[1000, 10000, 50000, 100000, 250000].map((n) => h('button.cz-chip', { onclick: () => { amount.value = String(n); label(); } }, `${fmt(n)}`)));
+    const go = h('button.btn.primary', { icon: 'coin' });
+    const label = () => {
+      const n = Math.max(0, Math.trunc(Number(amount.value) || 0));
+      go.textContent = '';
+      go.append(icon('coin'), `${take ? 'Take' : 'Give'} ${fmt(n)} coins`);
+      go.classList.toggle('danger', take);
+      go.classList.toggle('primary', !take);
+    };
+    const m = modal({
+      title: u ? `Coins for ${u.name}` : 'Give coins',
+      size: 'narrow',
+      body: h('div.stack',
+        u ? h('p.muted', { style: { margin: 0 } }, `${u.name} has ${u.coins == null ? 'no coins yet' : `${fmt(u.coins)} coins`}. Gifts show up in their launcher with your note.`) : h('label.field', 'Minecraft name', name),
+        h('div.field', h('span', 'Give or take'), mode.el || mode),
+        h('label.field', 'Coins', amount),
+        quick,
+        h('label.field', 'Note', note)),
+      footer: [h('button.btn.ghost', { onclick: () => m.close() }, 'Cancel'), go],
+    });
+    label();
+    amount.addEventListener('input', label);
+    setTimeout(() => (u ? amount : name).focus(), 50);
+    const submit = async () => {
+      if (!u && !name.value.trim()) { name.focus(); return; }
+      const n = Math.trunc(Number(amount.value) || 0);
+      if (n <= 0) { amount.focus(); return; }
+      go.disabled = true;
+      try {
+        const r = await api.admin.coins(u ? { uuid: u.uuid, name: u.name } : { name: name.value.trim() }, take ? -n : n, note.value.trim());
+        m.close();
+        ok(r.change >= 0 ? `Gave ${r.name} ${fmt(r.change)} coins` : `Took ${fmt(-r.change)} coins from ${r.name}`, `They have ${fmt(r.coins)} now.`);
+        // coins for yourself: straight into your wallet here too
+        if (r.uuid === store.friends?.me?.uuid) api.cosmetics.refresh().catch(() => {});
+        await load();
+      } catch (err) {
+        go.disabled = false;
+        fail(take ? 'Could not take the coins' : 'Could not give the coins', err);
+      }
+    };
+    go.onclick = submit;
+    for (const el of [name, amount, note]) el.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
   }
 
   async function unban(u) {

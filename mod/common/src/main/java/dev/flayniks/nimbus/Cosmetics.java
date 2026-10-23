@@ -25,7 +25,7 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 /**
- * Hats, pets, wings and auras on players. Yours come from the file the launcher writes
+ * Hats, pets, wings, auras and player models on players. Yours come from the file the launcher writes
  * (-Dnimbus.cosmetics); other players' from the friends service (-Dnimbus.api), asked about the
  * players around you in batches and remembered for a few minutes. Each Minecraft version's hook
  * calls collect() for the players it draws and hands the resulting mesh to CosmeticsDraw.
@@ -34,7 +34,8 @@ public final class Cosmetics {
 	private Cosmetics() {
 	}
 
-	static final String[] SLOTS = {"hat", "pet", "wings", "aura"};
+	static final String[] SLOTS = {"hat", "pet", "wings", "aura", "model"};
+	static final int MODEL = 4;
 	private static final float PX = 0.9375f / 16f; // one model pixel, in blocks
 	private static final float D2R = (float) (Math.PI / 180);
 	private static final long START = System.nanoTime();
@@ -48,7 +49,7 @@ public final class Cosmetics {
 	// ------------------------------------------------------------------ what you wear
 
 	private static final String OWN_FILE = System.getProperty("nimbus.cosmetics");
-	private static String[] own = new String[4];
+	private static String[] own = new String[SLOTS.length];
 	private static long ownChecked;
 	private static long ownModified = -1;
 
@@ -61,7 +62,7 @@ public final class Cosmetics {
 				long m = Files.exists(f) ? Files.getLastModifiedTime(f).toMillis() : 0;
 				if (m != ownModified) {
 					ownModified = m;
-					own = m == 0 ? new String[4] : worn(JsonParser.parseString(Files.readString(f)).getAsJsonObject());
+					own = m == 0 ? new String[SLOTS.length] : worn(JsonParser.parseString(Files.readString(f)).getAsJsonObject());
 				}
 			} catch (Exception ignored) {
 				// keep what we had
@@ -71,8 +72,8 @@ public final class Cosmetics {
 	}
 
 	private static String[] worn(JsonObject o) {
-		String[] out = new String[4];
-		for (int i = 0; i < 4; i++) {
+		String[] out = new String[SLOTS.length];
+		for (int i = 0; i < SLOTS.length; i++) {
 			JsonElement e = o.get(SLOTS[i]);
 			out[i] = e == null || e.isJsonNull() ? null : e.getAsString();
 		}
@@ -215,7 +216,12 @@ public final class Cosmetics {
 	private static final class Live {
 		final float phase = RND.nextFloat() * 100;
 		final List<Particle> particles = new ArrayList<>();
-		final float[] acc = new float[64];
+		final float[] acc = new float[SLOTS.length * 16];
+		// the model's form, and the one before it (for the change between)
+		String modelId;
+		int form;
+		int prevForm = -1;
+		float formChanged = -99f;
 		double petX;
 		double petY;
 		double petZ;
@@ -264,9 +270,14 @@ public final class Cosmetics {
 			float rz = (float) (z - camZ);
 			float neck = crouch ? 1.035f : 1.40625f;
 
+			CosmeticModel.Item model = worn.length > MODEL && worn[MODEL] != null ? items.get(worn[MODEL]) : null;
+			if (model != null && model.model == null) model = null;
+			if (model != null) drawModel(player, model, local, live, t, dt, x, y, z, bodyYaw, headYaw, pitch, pt, lying, crouch, camX, camY, camZ, light, mesh);
 			for (int s = 0; s < 4; s++) {
 				CosmeticModel.Item item = worn[s] == null ? null : items.get(worn[s]);
 				if (item == null) continue;
+				// a model has no head or back for a hat or wings to sit on
+				if (model != null && (s == 0 || s == 2)) continue;
 				Matrix4f m = new Matrix4f();
 				switch (s) {
 					case 0 -> { // hat: rides the head
@@ -311,6 +322,78 @@ public final class Cosmetics {
 		}
 	}
 
+	/** A player model, standing in for the player: posed like them, in the state they chose. */
+	private static void drawModel(Player player, CosmeticModel.Item item, boolean local, Live live, float t, float dt, double x, double y, double z,
+			float bodyYaw, float headYaw, float pitch, float pt, boolean lying, boolean crouch, double camX, double camY, double camZ, int light, CosmeticMesh mesh) {
+		CosmeticModel.State st = local ? ModelState.own() : ModelState.of(player, item.model);
+		if (!item.id.equals(live.modelId)) {
+			live.modelId = item.id;
+			live.form = st.form;
+			live.prevForm = -1;
+		} else if (st.form != live.form) {
+			live.prevForm = live.form;
+			live.formChanged = t;
+			live.form = st.form;
+		}
+		st.prev = live.prevForm;
+		st.changed = live.formChanged;
+		CosmeticModel.Trans tr = CosmeticModel.transition(st, t);
+
+		CosmeticModel.Pose pose = new CosmeticModel.Pose();
+		pose.yaw = -(((headYaw - bodyYaw) % 360 + 540) % 360 - 180);
+		pose.pitch = pitch;
+		try {
+			pose.walk = player.walkAnimation.position(pt);
+			pose.speed = Math.min(1f, player.walkAnimation.speed(pt));
+			pose.attack = Compat.attackAnim(player, pt);
+		} catch (Throwable ignored) {
+			// standing still then
+		}
+		pose.crouch = crouch;
+		if (lying) pose.speed = Math.max(pose.speed, 0.3f);
+
+		Matrix4f m = new Matrix4f().translate((float) (x - camX), (float) (y - camY), (float) (z - camZ)).rotateY(-bodyYaw * D2R);
+		// swimming and gliding: tipped forward, lying along the way they go
+		if (lying) m.translate(0, 0.35f, 0).rotateX(80 * D2R).translate(0, -0.6f, 0);
+		if (crouch) m.translate(0, -0.12f, 0);
+		m.scale(PX);
+		for (CosmeticModel.Part p : item.parts) CosmeticModel.emit(p, m, t, light, mesh, pose, st, tr);
+		emitFx(item, MODEL, m, live, dt, camX, camY, camZ, st, tr);
+	}
+
+	/** The model a player wears (drawn instead of them), if any. */
+	static CosmeticModel.Item modelOf(Player p) {
+		try {
+			Minecraft mc = Minecraft.getInstance();
+			boolean local = p == mc.player;
+			if (!local && !showOthers()) return null;
+			String[] worn = local ? own() : others(p);
+			if (worn == null || worn.length <= MODEL || worn[MODEL] == null) return null;
+			CosmeticModel.Item it = CosmeticModel.items().get(worn[MODEL]);
+			return it != null && it.model != null ? it : null;
+		} catch (Throwable t) {
+			return null;
+		}
+	}
+
+	/** The inventory screen's picture of you is drawing (it shows your own skin, not the model). */
+	public static int doll;
+
+	/** Whether Minecraft should leave this player out: a model is drawn in their place. */
+	public static boolean hidesVanilla(Object entity) {
+		if (doll > 0 || !(entity instanceof Player p) || p.isInvisible() || p.isSpectator()) return false;
+		return modelOf(p) != null;
+	}
+
+	/** How high a player's model stands, in blocks (0 without one): their name goes above it. */
+	public static double modelTop(Object entity) {
+		if (!(entity instanceof Player p)) return 0;
+		CosmeticModel.Item it = modelOf(p);
+		if (it == null) return 0;
+		int form = p == Minecraft.getInstance().player ? ModelState.form() : ModelState.of(p, it.model).form;
+		return it.model.height(form) * PX;
+	}
+
 	/** Every player in the world (for the versions whose hook runs once per frame). */
 	public static void collectAll(double camX, double camY, double camZ, float pt, boolean firstPerson, CosmeticMesh mesh) {
 		Minecraft mc = Minecraft.getInstance();
@@ -329,11 +412,16 @@ public final class Cosmetics {
 	}
 
 	private static void emitFx(CosmeticModel.Item item, int slot, Matrix4f m, Live live, float dt, double camX, double camY, double camZ) {
+		emitFx(item, slot, m, live, dt, camX, camY, camZ, null, null);
+	}
+
+	private static void emitFx(CosmeticModel.Item item, int slot, Matrix4f m, Live live, float dt, double camX, double camY, double camZ, CosmeticModel.State st, CosmeticModel.Trans tr) {
 		if (dt <= 0f) return;
 		Vector3f p = new Vector3f();
 		Vector3f v = new Vector3f();
 		for (int i = 0; i < item.fx.length && i < 16; i++) {
 			CosmeticModel.Fx fx = item.fx[i];
+			if (!CosmeticModel.shows(fx.wf, fx.we, fx.wp, st, tr)) continue;
 			int a = slot * 16 + i;
 			live.acc[a] += dt * fx.rate;
 			while (live.acc[a] >= 1f && live.particles.size() < 220) {

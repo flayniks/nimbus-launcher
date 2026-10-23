@@ -34,6 +34,7 @@ public final class NimbusHud {
 	private static long lastMove;
 	static double speed;
 	private static boolean shortcutWasDown;
+	private static boolean powersWasDown;
 
 	// ------------------------------------------------------------------ modules
 
@@ -513,6 +514,15 @@ public final class NimbusHud {
 		boolean shortcut = Compat.screen() == null && NimbusConfig.on("menu.shortcut", true) && Compat.keyDown(Compat.KEY_RIGHT_SHIFT);
 		if (shortcut && !shortcutWasDown) mc.execute(() -> Compat.setScreen(Compat.features(null)));
 		shortcutWasDown = shortcut;
+
+		// G opens your player model's powers (when it has some)
+		boolean powers = Compat.screen() == null && mc.player != null && Compat.keyDown(Compat.KEY_G);
+		if (powers && !powersWasDown) {
+			CosmeticModel.Item model = ModelState.worn();
+			if (model != null && model.model.powers()) mc.execute(() -> Compat.setScreen(Compat.powers(null)));
+		}
+		powersWasDown = powers;
+		ModelState.tick();
 
 		Tweaks.frame(mc);
 		if (mc.level != null && NimbusConfig.on("hud.ping", false)) Ping.tick(mc);

@@ -36,6 +36,9 @@ public final class CosmeticsDraw {
 	private static MethodHandle floatColour; // (vc, x, y, z, r, g, b, a, u, v, overlay, light, nx, ny, nz)
 	private static Method submitGeometry;
 	private static Class<?> geometryCallback;
+	// player models' pictures: render types (and textures) made the first time each is drawn
+	private static final java.util.Map<String, Object> pictures = new java.util.HashMap<>();
+	private static final java.util.Map<String, Object> textures = new java.util.HashMap<>();
 
 	private static synchronized boolean ready() {
 		if (looked) return ok;
@@ -94,15 +97,57 @@ public final class CosmeticsDraw {
 		return null;
 	}
 
+	/** A player model's picture (assets/nimbus/textures/models/<name>.png), loaded once; null if it can't be. */
+	public static synchronized Object texture(String name) {
+		if (textures.containsKey(name)) return textures.get(name);
+		Object id = null;
+		try (java.io.InputStream in = CosmeticsDraw.class.getResourceAsStream("/assets/nimbus/textures/models/" + name + ".png")) {
+			if (in != null) {
+				id = Compat.makeTexture(in.readAllBytes(), "models/" + name);
+				smooth(id);
+			}
+		} catch (Throwable ignored) {
+			// drawn without it
+		}
+		textures.put(name, id);
+		return id;
+	}
+
+	/** Pictures on models are smoothed, so faces stay clean from a distance (where the version allows it). */
+	private static void smooth(Object id) {
+		try {
+			Object tex = net.minecraft.client.Minecraft.getInstance().getTextureManager().getTexture((ResourceLocation) id);
+			for (Method m : tex.getClass().getMethods()) {
+				Class<?>[] p = m.getParameterTypes();
+				if (p.length == 2 && p[0] == boolean.class && p[1] == boolean.class && (m.getName().equals("setFilter") || m.getName().equals("method_4527"))) {
+					m.invoke(tex, true, false);
+					return;
+				}
+			}
+		} catch (Throwable ignored) {
+			// sharp then
+		}
+	}
+
+	private static Object picture(String name) {
+		if (pictures.containsKey(name)) return pictures.get(name);
+		Object id = texture(name);
+		Object type = id == null ? null : factory((ResourceLocation) id, "method_23578", "method_75969", "method_75994", "entityCutoutNoCull");
+		pictures.put(name, type);
+		return type;
+	}
+
 	/** Up to 1.21.8: straight into the frame's buffers. */
 	public static void draw(PoseStack pose, MultiBufferSource buffers, CosmeticMesh mesh) {
 		if (mesh.isEmpty() || !ready()) return;
 		Matrix4f m = pose.last().pose();
 		try {
-			for (int b = 0; b < 3; b++) {
+			for (int b = 0; b < mesh.batches; b++) {
 				if (mesh.count[b] == 0) continue;
-				VertexConsumer vc = buffers.getBuffer((RenderType) type(b));
-				emit(vc, m, mesh.pos[b], mesh.col[b], mesh.count[b]);
+				Object type = type(b, mesh);
+				if (type == null) continue;
+				VertexConsumer vc = buffers.getBuffer((RenderType) type);
+				emit(vc, m, mesh.pos[b], mesh.uv[b], mesh.col[b], mesh.count[b]);
 			}
 		} catch (Throwable t) {
 			ok = false; // something about this version doesn't fit: stop trying
@@ -124,11 +169,14 @@ public final class CosmeticsDraw {
 				}
 				if (submitGeometry == null) throw new NoSuchMethodException("submitCustomGeometry");
 			}
-			for (int b = 0; b < 3; b++) {
+			for (int b = 0; b < mesh.batches; b++) {
 				int n = mesh.count[b];
 				if (n == 0) continue;
+				Object type = type(b, mesh);
+				if (type == null) continue;
 				// the callback runs after this frame's mesh is reused, so it gets its own copy
 				float[] pos = Arrays.copyOf(mesh.pos[b], n * 6);
+				float[] uv = Arrays.copyOf(mesh.uv[b], n * 2);
 				int[] col = Arrays.copyOf(mesh.col[b], n * 2);
 				Object callback = Proxy.newProxyInstance(geometryCallback.getClassLoader(), new Class<?>[] {geometryCallback}, (proxy, method, args) -> {
 					if (method.getDeclaringClass() == Object.class) {
@@ -138,21 +186,22 @@ public final class CosmeticsDraw {
 							default -> "Nimbus cosmetics";
 						};
 					}
-					emit((VertexConsumer) args[1], ((PoseStack.Pose) args[0]).pose(), pos, col, n);
+					emit((VertexConsumer) args[1], ((PoseStack.Pose) args[0]).pose(), pos, uv, col, n);
 					return null;
 				});
-				submitGeometry.invoke(collector, pose, type(b), callback);
+				submitGeometry.invoke(collector, pose, type, callback);
 			}
 		} catch (Throwable t) {
 			ok = false;
 		}
 	}
 
-	private static Object type(int batch) {
+	private static Object type(int batch, CosmeticMesh mesh) {
+		if (batch >= 3) return picture(mesh.tex[batch]);
 		return batch == CosmeticMesh.SOLID ? cutout : batch == CosmeticMesh.SEE ? translucent : glow;
 	}
 
-	private static void emit(VertexConsumer vc, Matrix4f m, float[] pos, int[] col, int n) throws Throwable {
+	private static void emit(VertexConsumer vc, Matrix4f m, float[] pos, float[] uv, int[] col, int n) throws Throwable {
 		Vector3f v = new Vector3f();
 		Vector3f nn = new Vector3f();
 		for (int i = 0; i < n; i++) {
@@ -160,10 +209,12 @@ public final class CosmeticsDraw {
 			m.transformDirection(nn.set(pos[i * 6 + 3], pos[i * 6 + 4], pos[i * 6 + 5])).normalize();
 			int argb = col[i * 2];
 			int light = col[i * 2 + 1];
+			float u = uv[i * 2];
+			float w = uv[i * 2 + 1];
 			if (intColour != null) {
-				intColour.invokeExact(vc, v.x, v.y, v.z, argb, 0.5f, 0.5f, OVERLAY, light, nn.x, nn.y, nn.z);
+				intColour.invokeExact(vc, v.x, v.y, v.z, argb, u, w, OVERLAY, light, nn.x, nn.y, nn.z);
 			} else {
-				floatColour.invokeExact(vc, v.x, v.y, v.z, ((argb >> 16) & 255) / 255f, ((argb >> 8) & 255) / 255f, (argb & 255) / 255f, (argb >>> 24) / 255f, 0.5f, 0.5f, OVERLAY, light, nn.x, nn.y, nn.z);
+				floatColour.invokeExact(vc, v.x, v.y, v.z, ((argb >> 16) & 255) / 255f, ((argb >> 8) & 255) / 255f, (argb & 255) / 255f, (argb >>> 24) / 255f, u, w, OVERLAY, light, nn.x, nn.y, nn.z);
 			}
 		}
 	}

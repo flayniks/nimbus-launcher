@@ -165,6 +165,18 @@ They show in Fabric and Quilt games, on you (in third person) and on every other
 
 The models are built by `tools/cosmetics` (`node tools/cosmetics/build.mjs`) into one file that both the game and the launcher's previews read, plus the price list the service uses.
 
+### Player models
+
+The **Models** tab has player models: you play as the model instead of your skin, and every Nimbus player sees it. It moves with you: it walks when you walk, looks where you look, swings when you hit and lies down when you swim or glide. Your skin and what's on it (armour, cape, what's in your hands) aren't drawn while you wear one, and hats and wings come off too (pets and auras stay). Your name goes above it. The inventory still shows your own skin.
+
+**Verity** (100,000 coins), the smiley AI helper from ThatMob's Verity series, floats where you'd stand as a smooth yellow ball and looks where you look. Its faces are 512 × 512 pictures on the ball, traced from the Verity wiki's pictures of all 17 faces in the videos (normal, open, sleeping, neutral, smiling eerily, displeased, sad, hurt, no face…), so they stay sharp up close.
+
+Models marked **Powers** have more: faces to switch between, other forms, or a power you turn on (Verity's is *Glitch*, which makes it jerk and shudder in a cloud of smoke and sparks). Press **G** in game to open its powers: the faces as pictures to click, its forms and its power. On the Cosmetics page you can try them all on the preview, and make it walk.
+
+Everyone sees which face, form and power you picked, on any server and straight away: while you wear a model with powers, Nimbus sends its state in the seven skin-layer switches (jacket, sleeves, hat…) that every server already passes on to everyone. The model hides your skin, so nothing is lost, and your own skin-layer settings come back when you take it off. Players without Nimbus see your normal skin, with its layers switching about now and then.
+
+Models are built from blocks like the other cosmetics, and can also have smooth shapes (balls, tubes and meshes made in Blender) wearing pictures from `tools/cosmetics/art`.
+
 ### Nimbus coins
 
 Commons are free. Everything else is unlocked with **Nimbus coins** (rare 150, epic 300, legendary 600, mythic 1,000), which you earn by playing with Nimbus:
@@ -234,6 +246,7 @@ Nimbus admins get an **Admin** page in the sidebar (the lock). Admins are set by
 
 - **Everyone:** every player who has signed in to Nimbus, with who's online, playing or hosting right now, when they were last seen, when they started, their coins and how many launcher installs they used. Totals at the top (users, online, playing, new today, banned), a search by name or uuid, and *Everyone / Online / Banned* filters. It refreshes every 30 seconds.
 - **Ban** someone from their row, or *Ban by name* (they don't need to have used Nimbus yet), with a reason they see and a length (1 day, 7 days, 30 days or forever). **Unban** from the same row.
+- **Coins** on anyone's row (yours too), or *Give coins* by name: give coins (or take them away), with quick amounts up to 250,000 and a note. The player's launcher shows them arriving, with the note, and their balance changes at once.
 
 A banned player's launcher shows a ban screen with the reason and when it ends, and won't start games (one that's already open isn't closed, which could damage a world). The service refuses them friends, chat, cosmetics and coins, and their Nimbus badge goes. The ban covers the account and every install of the launcher it was used on, so another account on the same computer is banned too. For that, each launcher makes a random install id the first time it runs (in `friends.json`, nothing taken from the computer) and sends it when it signs in. The ban is remembered, so going offline doesn't lift it. It's checked at start, every 5 minutes, and with every friends update, so a ban or unban arrives within about 15 seconds while the launcher is open. Admins can't be banned.
 
@@ -329,6 +342,8 @@ In 1.8.1, two real launchers (Alex and Steve) on a local copy of the friends ser
 In 1.8.2, two real launchers ran against a local copy of the service with Alex as the admin. Alex saw the Admin page (Steve didn't), the user list and totals, banned Steve for 7 days with a reason, and within a few seconds Steve's launcher showed the ban screen and refused to start a game; it was still banned after a restart. After Alex unbanned him, *Check again* cleared it. A ban by name worked too. The service's rules (admins only, admins can't be banned, a ban covering the account's installs and another account on them, bans running out, banned players losing their badge) and the badge lookups (players who wear nothing, offline-mode uuids, names, sessions from before) are in `test/unit.js`.
 
 In 1.8.3, *Your texts* was driven in a real Fabric 1.21.1 game: adding texts with Enter and the *Add* button, rainbow and colour codes, a boxed one, editing one, switching styles and typing straight after a click, removing one, dragging and resizing a text in *Edit HUD layout*, and seeing them in a world; the 21st text was refused. Every game method the new screen uses was checked to exist in each release from 1.20 to 26.3.
+
+In 1.9.0, the real launcher ran against a local copy of the service with Alex as the admin: Alex gave himself 250,000 coins from the Admin page (the toast and the new balance came straight away), bought Verity on the Models tab, put it on and tried its 17 faces, Glitch and walking on the preview, and the game was told. Verity was then played in real games: on Fabric 1.21.1 in singleplayer (the ball instead of the player, the G menu, a face and Glitch picked in it), and with two players on a server, where Steve saw Alex as Verity with the face Alex had picked in his game. It was also played in worlds on Fabric 1.21.4 and 1.21.11 (the two newer ways Minecraft draws players), with the G menu and a face change. The 26.x build was checked against 26.1, 26.2 and 26.3 for every call and hook it makes (this computer's graphics couldn't start 26.x at all, even without Nimbus). The admin coins rules (admins only, never below zero, the gift shown once with its note) are in `test/unit.js`.
 
 In 1.8.4, Browse → Maps ran in the real launcher against a stand-in for CurseForge's API (the real one can't be used without a key): the list, search, kinds, a map's window (pictures, description with its script stripped), installing from the window and from a card into a 1.21.1 instance, *Installed* on its card, a map only downloadable on CurseForge, *Add map file*, and the "not set up yet" message for a service without a key. The installed maps showed in Minecraft's world list under their own names and loaded in the real game. How map zips unpack (wrapped, several worlds, junk, a path trying to escape, no world) and the service's map routes are in `test/unit.js`.
 

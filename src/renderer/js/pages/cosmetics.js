@@ -1,14 +1,33 @@
-// Cosmetics: 3D hats, pets, wings and auras. Pick one per slot; it shows on you in game straight
+// Cosmetics: player models, and 3D hats, pets, wings and auras. Pick one per slot; it shows on you in game straight
 // away, and on every other Nimbus player's screen once it's shared. Commons are free; the rest
 // are unlocked with Nimbus coins, earned with daily tasks and achievements in game.
-import { h, icon, clear, fail, modal } from '../ui.js';
+import { h, icon, clear, fail, ok, modal } from '../ui.js';
 import { api, store } from '../store.js';
-import { COSMETICS, SLOTS, RARITY, CosmeticViewer, thumbnails, byId } from '../cosmetics3d.js';
+import { COSMETICS, SLOTS, RARITY, CosmeticViewer, thumbnails, byId, powersOf } from '../cosmetics3d.js';
 
 const ORDER = ['mythic', 'legendary', 'epic', 'rare', 'common'];
 const EARN = 'earn';
 const thumbs = new Map(); // id -> data URL, kept for the whole session
-let lastSlot = 'hat';
+let lastSlot = 'model';
+
+/** The picture of a model's face (for the face buttons), when its faces are pictures. */
+function facePicture(item, face) {
+  const find = (p, inFace) => {
+    if (p.w && p.w[1] >= 0 && p.w[1] !== face) return null;
+    const here = inFace || (p.w && p.w[1] === face);
+    if (here) for (const g of p.g || []) if (g.tex) return g.tex;
+    for (const c of p.c || []) {
+      const t = find(c, here);
+      if (t) return t;
+    }
+    return null;
+  };
+  for (const p of item.parts) {
+    const t = find(p, false);
+    if (t) return `img/models/${t}.png`;
+  }
+  return null;
+}
 
 const fmtNumber = (n) => Math.floor(n || 0).toLocaleString('en-US');
 const coins = (n) => h('span.cz-coins', icon('coin'), h('b', fmtNumber(n)));
@@ -44,6 +63,7 @@ export function render(page) {
     stage.append(h('div.cz-nogl', icon('alert'), h('span', '3D preview needs graphics acceleration')));
   }
   const worn = h('div.cz-worn');
+  const powersBox = h('div.cz-powers-box');
   const syncNote = h('div.cz-sync');
   const daily = h('div.cz-daily');
   const balance = h('div.cz-balance');
@@ -63,9 +83,9 @@ export function render(page) {
   const earn = h('div.cz-earn');
 
   page.append(
-    h('div.page-head', h('div', h('h1', 'Cosmetics'), h('p', `${COSMETICS.length} hats, pets, wings and auras in 3D. Every Nimbus player sees them on you in Fabric and Quilt games.`)), balance),
+    h('div.page-head', h('div', h('h1', 'Cosmetics'), h('p', `${COSMETICS.length} player models, hats, pets, wings and auras in 3D. Every Nimbus player sees them on you in Fabric and Quilt games.`)), balance),
     h('div.cz-shell',
-      h('div.cz-left', stage, worn, syncNote, daily),
+      h('div.cz-left', stage, powersBox, worn, syncNote, daily),
       h('div.cz-right', tabs, filters, grid, earn)),
   );
 
@@ -95,6 +115,7 @@ export function render(page) {
     img.dataset.id = item.id;
     const el = h(`div.cz-card${on ? '.on' : ''}${mine ? '' : '.locked'}`, { style: { '--rc': RARITY[item.rarity] }, title: item.desc, tabIndex: 0 },
       h('div.cz-thumb-box', img, on ? h('span.cz-check', icon('check')) : null, mine ? null : h('span.cz-lock', icon('lock'))),
+      powersOf(item).length ? h('span.cz-power-tag', { title: `Powers: ${powersOf(item).join(', ')}` }, icon('sparkles'), 'Powers') : null,
       h('div.cz-meta', h('b', item.name), h('div.cz-meta-row', h('span.cz-rarity', item.rarity), mine ? (item.price === 0 ? h('span.cz-free', 'free') : null) : coins(item.price))));
     el.onclick = () => (mine ? wear(item) : unlock(item));
     el.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.onclick(); } };
@@ -212,7 +233,34 @@ export function render(page) {
     );
   }
 
+  // a model's powers, to try out on the preview: faces, forms, its power, and walking
+  function drawPowers() {
+    clear(powersBox);
+    const item = viewer?.model;
+    powersBox.hidden = !item;
+    if (!item) return;
+    const st = viewer.modelState;
+    const m = item.m;
+    const set = (patch) => { viewer.setModelState(patch); drawPowers(); };
+    const list = powersOf(item);
+    powersBox.append(h('div.cz-powers-head', icon('sparkles'), h('b', list.length ? `${item.name}'s powers` : item.name),
+      h('span.muted', list.length ? 'Press G in game to use them. Everyone sees them.' : 'This model has no powers.')));
+    if (m.faces?.length > 1) {
+      powersBox.append(h('div.cz-faces', ...m.faces.map((name, i) => {
+        const pic = facePicture(item, i);
+        return h(`button.cz-face${st.face === i ? '.on' : ''}`, { title: name, onclick: () => set({ face: i }) },
+          pic ? h('img', { src: pic, alt: '' }) : h('b', String(i + 1)));
+      })));
+    }
+    const row = h('div.cz-power-row');
+    if (m.forms?.length > 1) for (const [i, name] of m.forms.entries()) row.append(h(`button.cz-chip${st.form === i ? '.on' : ''}`, { onclick: () => set({ form: i }) }, name));
+    if (m.power) row.append(h(`button.cz-chip${st.power ? '.on' : ''}`, { onclick: () => set({ power: !st.power }) }, icon('sparkles'), `${m.power}: ${st.power ? 'on' : 'off'}`));
+    row.append(h(`button.cz-chip${viewer.walking ? '.on' : ''}`, { onclick: () => { viewer.walking = !viewer.walking; drawPowers(); } }, icon('play'), viewer.walking ? 'Walking' : 'Walk'));
+    powersBox.append(row);
+  }
+
   function redraw() {
+    drawPowers();
     drawTabs();
     drawGrid();
     drawWorn();
@@ -226,6 +274,7 @@ export function render(page) {
       state = await api.cosmetics.set(item.slot, id);
       viewer?.equip(item.slot, id);
       redraw();
+      if (id && item.slot === 'model' && powersOf(item).length) ok(`${item.name} is on`, 'Press G in game to use its powers.');
     } catch (err) {
       fail('Could not put that on', err);
     }
@@ -275,10 +324,13 @@ export function render(page) {
     if (hovering) viewer.equip(hovering, state.worn[hovering] || null);
     hovering = item ? item.slot : null;
     if (item) viewer.equip(item.slot, item.id);
+    drawPowers();
   }
 
   // ------------------------------------------------------------ load
-  const stopThumbs = thumbnails(COSMETICS.map((c) => c.id).filter((id) => !thumbs.has(id)), 160, (id, url) => {
+  // the open tab's pictures first
+  const order = [...COSMETICS].sort((a, b) => (b.slot === slot) - (a.slot === slot));
+  const stopThumbs = thumbnails(order.map((c) => c.id).filter((id) => !thumbs.has(id)), 160, (id, url) => {
     thumbs.set(id, url);
     for (const img of page.querySelectorAll(`img[data-id="${id}"]`)) {
       img.classList.remove('broken');

@@ -21,6 +21,10 @@ public interface Canvas {
 		return s.length() * 6;
 	}
 
+	/** A player model's picture (assets/nimbus/textures/models/<name>.png) over [x, x+w) x [y, y+h). */
+	default void picture(String name, int x, int y, int w, int h) {
+	}
+
 	/** Moves the origin to (x, y) and scales everything drawn until pop(). */
 	default void push(float x, float y, float scale) {
 	}

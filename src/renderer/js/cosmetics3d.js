@@ -5,7 +5,17 @@ import data from './cosmetics-data.js';
 
 export const COSMETICS = data.items;
 export const byId = new Map(COSMETICS.map((c) => [c.id, c]));
-export const SLOTS = [['hat', 'Hats'], ['pet', 'Pets'], ['wings', 'Wings'], ['aura', 'Auras']];
+export const SLOTS = [['model', 'Models'], ['hat', 'Hats'], ['pet', 'Pets'], ['wings', 'Wings'], ['aura', 'Auras']];
+/** A model's powers, in words (for badges): forms, faces and the power. */
+export function powersOf(item) {
+  const m = item?.m;
+  if (!m) return [];
+  const out = [];
+  if (m.forms?.length > 1) out.push(m.forms.slice(1).map((f) => `${f} form`).join(', '));
+  if (m.faces?.length > 1) out.push(`${m.faces.length} faces`);
+  if (m.power) out.push(m.power);
+  return out;
+}
 export const RARITY = { common: '#9aa3b5', rare: '#4cc3f0', epic: '#b57bff', legendary: '#ffb23f', mythic: '#ff5a8a' };
 
 const GLOW = 1;
@@ -132,10 +142,66 @@ export function animate(m, a, t) {
   }
 }
 
-/** A part's matrix inside its parent: pivot, base rotation, animations, scale. */
-export function partMatrix(m, p, t) {
+/**
+ * How a player model's role parts move (the same maths as Nimbus Core's Cosmetics.java):
+ * pose = { yaw, pitch: where the head looks, in degrees, against the body; walk: walk cycle
+ * position; speed: 0 standing to 1 running; crouch; attack: 0..1 of a swing }.
+ */
+export function role(m, k, pose, t) {
+  if (!k || !pose) return;
+  const c = Math.cos(pose.walk * 0.6662) * pose.speed;
+  switch (k) {
+    case 'head':
+    case 'look':
+      rotate(m, 'y', pose.yaw);
+      rotate(m, 'x', pose.pitch);
+      break;
+    case 'legL': rotate(m, 'x', c * 1.4 / D2R); break;
+    case 'legR': rotate(m, 'x', -c * 1.4 / D2R); break;
+    case 'armL': rotate(m, 'x', -c / D2R); break;
+    case 'armR': rotate(m, 'x', c / D2R - Math.sin(Math.sqrt(pose.attack) * Math.PI) * 80); break;
+    case 'body': if (pose.crouch) rotate(m, 'x', 28); break;
+    case 'tail': rotate(m, 'y', Math.sin(t * (2 + 6 * pose.speed)) * (10 + 25 * pose.speed)); break;
+    case 'hop': {
+      const k2 = Math.abs(Math.sin(pose.walk * 0.6662)) * pose.speed;
+      translate(m, 0, k2 * 7, 0);
+      m.multiply(tmp.makeScale(1 + 0.12 * (1 - k2) * pose.speed, 1 - 0.12 * (1 - k2) * pose.speed + 0.1 * k2, 1 + 0.12 * (1 - k2) * pose.speed));
+      break;
+    }
+    case 'lean': rotate(m, 'x', pose.speed * 25); break;
+    default:
+  }
+}
+
+/** While a model changes form: which form shows, and how it's moved and scaled. */
+export function transition(state, t) {
+  const d = t - (state.changed ?? -99);
+  if (d >= 0.9 || state.prev === undefined || state.prev === state.form) return null;
+  if (d < 0.5) {
+    const show = Math.floor(d / 0.07) % 2 === 0 ? state.form : state.prev;
+    return { show, scale: 1, dx: Math.sin(d * 91) * 0.9, dz: Math.cos(d * 77) * 0.9 };
+  }
+  const k = (d - 0.5) / 0.4;
+  const back = 1 + 2.70158 * Math.pow(k - 1, 3) + 1.70158 * Math.pow(k - 1, 2);
+  return { show: state.form, scale: 0.6 + 0.4 * back, dx: 0, dz: 0 };
+}
+
+/** Whether a part (or effect) with w = [form, face, power] shows in `state`. */
+export function shows(w, state, tr) {
+  if (!w) return true;
+  const form = tr ? tr.show : state.form;
+  return (w[0] < 0 || w[0] === form) && (w[1] < 0 || w[1] === state.face) && (w[2] < 0 || w[2] === (state.power ? 1 : 0));
+}
+
+/** A part's matrix inside its parent: pivot, base rotation, its role, animations, scale. */
+export function partMatrix(m, p, t, pose = null, tr = null) {
   translate(m, p.p[0], p.p[1], p.p[2]);
+  if (tr && p.w && p.w[0] >= 0) {
+    translate(m, tr.dx, 0, tr.dz);
+    if (tr.scale !== 1) m.multiply(tmp.makeScale(tr.scale, tr.scale, tr.scale));
+  }
   if (p.r) { rotate(m, 'x', p.r[0]); rotate(m, 'y', p.r[1]); rotate(m, 'z', p.r[2]); }
+  role(m, p.k, pose, t);
   for (const a of p.a || []) animate(m, a, t);
   if (p.s) m.multiply(tmp.makeScale(p.s, p.s, p.s));
   return m;
@@ -208,6 +274,195 @@ function partMeshes(p) {
   return out;
 }
 
+// ------------------------------------------------------------------ smooth shapes (same maths as the mod)
+
+/**
+ * A shape as quads: [[x, y, z, nx, ny, nz, u, v] x 4] each. Balls have their poles on z, so the
+ * front half (facing +z) can show a picture seen from the front; the back half takes the
+ * picture's top-left pixel.
+ */
+export function shapeQuads(g) {
+  const quads = [];
+  const n = g.n;
+  if (g.t === 'ball') {
+    const rings = Math.max(4, Math.round(n / 4) * 2);
+    const [cx, cy, cz] = g.c;
+    const [rx, ry, rz] = g.r;
+    // tp: wider at the top (> 0) or the bottom (< 0), across and front to back
+    const [tx, tz] = g.tp || [0, 0];
+    const v = (th, ph, front) => {
+      const ux = Math.sin(th) * Math.cos(ph);
+      const uy = Math.sin(th) * Math.sin(ph);
+      const uz = Math.cos(th);
+      const kx = 1 + tx * uy;
+      const kz = 1 + tz * uy;
+      let nx = ux / (rx * kx);
+      let ny = uy / ry;
+      let nz = uz / (rz * kz);
+      const l = Math.hypot(nx, ny, nz) || 1;
+      nx /= l; ny /= l; nz /= l;
+      // wrap: the picture all the way round (skin); otherwise seen from the front (faces)
+      if (g.wrap) return [cx + rx * kx * ux, cy + ry * uy, cz + rz * kz * uz, nx, ny, nz, ph / (2 * Math.PI), th / Math.PI];
+      return [cx + rx * kx * ux, cy + ry * uy, cz + rz * kz * uz, nx, ny, nz, front ? 0.5 + 0.5 * ux : 0.004, front ? 0.5 - 0.5 * uy : 0.004];
+    };
+    // half: only the front half (a face over a skin ball just inside it)
+    for (let i = 0; i < (g.half ? rings / 2 : rings); i++) {
+      const t0 = (Math.PI * i) / rings;
+      const t1 = (Math.PI * (i + 1)) / rings;
+      const front = i < rings / 2;
+      for (let j = 0; j < n; j++) {
+        const p0 = (2 * Math.PI * j) / n;
+        const p1 = (2 * Math.PI * (j + 1)) / n;
+        quads.push([v(t0, p0, front), v(t1, p0, front), v(t1, p1, front), v(t0, p1, front)]);
+      }
+    }
+  } else {
+    const [ax, ay, az] = g.a;
+    const [bx, by, bz] = g.b;
+    const [r0, r1] = g.r;
+    let dx = bx - ax;
+    let dy = by - ay;
+    let dz = bz - az;
+    const len = Math.hypot(dx, dy, dz) || 1;
+    dx /= len; dy /= len; dz /= len;
+    // u: across the tube, w = d x u
+    const [hx, hy, hz] = Math.abs(dy) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+    let ux = hy * dz - hz * dy;
+    let uy = hz * dx - hx * dz;
+    let uz = hx * dy - hy * dx;
+    const ul = Math.hypot(ux, uy, uz) || 1;
+    ux /= ul; uy /= ul; uz /= ul;
+    const wx = dy * uz - dz * uy;
+    const wy = dz * ux - dx * uz;
+    const wz = dx * uy - dy * ux;
+    const slope = (r0 - r1) / len;
+    const v = (ph, end) => {
+      const c = Math.cos(ph);
+      const s = Math.sin(ph);
+      const rx = ux * c + wx * s;
+      const ry = uy * c + wy * s;
+      const rz = uz * c + wz * s;
+      const r = end ? r1 : r0;
+      let nx = rx + dx * slope;
+      let ny = ry + dy * slope;
+      let nz = rz + dz * slope;
+      const l = Math.hypot(nx, ny, nz) || 1;
+      nx /= l; ny /= l; nz /= l;
+      // a picture wraps round the tube: across it once, along it once
+      return [(end ? bx : ax) + rx * r, (end ? by : ay) + ry * r, (end ? bz : az) + rz * r, nx, ny, nz, ph / (2 * Math.PI), end ? 1 : 0];
+    };
+    for (let j = 0; j < n; j++) {
+      const p0 = (2 * Math.PI * j) / n;
+      const p1 = (2 * Math.PI * (j + 1)) / n;
+      quads.push([v(p0, false), v(p1, false), v(p1, true), v(p0, true)]);
+    }
+  }
+  return quads;
+}
+
+/**
+ * A sculpted mesh (made in Blender, see tools/cosmetics/blender): n vertices of 12 bytes each in v
+ * (x, y, z as int16 in 1/64 pixels; a normal as 3 int8; a colour as 3 bytes), triangles in i (uint16).
+ */
+export function meshData(g) {
+  if (g._mesh) return g._mesh;
+  const bytes = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const v = new DataView(bytes(g.v).buffer);
+  const idx = bytes(g.i);
+  const pos = new Float32Array(g.n * 3);
+  const nor = new Float32Array(g.n * 3);
+  const col = new Float32Array(g.n * 3);
+  for (let k = 0; k < g.n; k++) {
+    const o = k * 12;
+    pos[k * 3] = v.getInt16(o, true) / 64;
+    pos[k * 3 + 1] = v.getInt16(o + 2, true) / 64;
+    pos[k * 3 + 2] = v.getInt16(o + 4, true) / 64;
+    nor[k * 3] = v.getInt8(o + 6) / 127;
+    nor[k * 3 + 1] = v.getInt8(o + 7) / 127;
+    nor[k * 3 + 2] = v.getInt8(o + 8) / 127;
+    col[k * 3] = v.getUint8(o + 9) / 255;
+    col[k * 3 + 1] = v.getUint8(o + 10) / 255;
+    col[k * 3 + 2] = v.getUint8(o + 11) / 255;
+  }
+  const tri = new Uint16Array(idx.buffer, idx.byteOffset, idx.byteLength / 2);
+  g._mesh = { pos, nor, col, tri };
+  return g._mesh;
+}
+
+const TEXTURES = new Map(); // name -> { tex, mat, ready }
+function texture(name) {
+  if (!TEXTURES.has(name)) {
+    let done;
+    const ready = new Promise((r) => { done = r; });
+    const tex = new THREE.TextureLoader().load(`img/models/${name}.png`, () => done(), undefined, () => done());
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    TEXTURES.set(name, { tex, ready, mat: new THREE.MeshLambertMaterial({ map: tex, vertexColors: true }) });
+  }
+  return TEXTURES.get(name);
+}
+
+/** Waits for the pictures an item's shapes wear. */
+export function texturesOf(item) {
+  const names = new Set();
+  const walk = (p) => { for (const g of p.g || []) if (g.tex) names.add(g.tex); (p.c || []).forEach(walk); };
+  (item?.parts || []).forEach(walk);
+  return Promise.all([...names].map((n) => texture(n).ready));
+}
+
+/** A part's shapes as meshes: one per picture, and solid / see-through / glowing ones. */
+function shapeMeshes(p) {
+  const groups = new Map();
+  const out = [];
+  for (const g of p.g || []) {
+    if (g.t === 'mesh') {
+      const d = meshData(g);
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(d.pos, 3));
+      geo.setAttribute('normal', new THREE.BufferAttribute(d.nor, 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(Float32Array.from(d.col, lin), 3));
+      geo.setIndex(new THREE.BufferAttribute(d.tri, 1));
+      const mesh = new THREE.Mesh(geo, MATS.solid);
+      mesh.userData.live = [];
+      out.push(mesh);
+      continue;
+    }
+    const key = g.tex ? `t:${g.tex}` : bucketOf([0, 0, 0, 0, 0, 0, g.col, g.f || 0]);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(g);
+  }
+  for (const [key, shapes] of groups) {
+    const pos = [];
+    const nor = [];
+    const uv = [];
+    const col = [];
+    const index = [];
+    for (const g of shapes) {
+      const [r, gr, b] = g.tex ? [1, 1, 1] : boxColour([0, 0, 0, 0, 0, 0, g.col, g.f || 0], 0);
+      for (const q of shapeQuads(g)) {
+        const base = pos.length / 3;
+        for (const v of q) {
+          pos.push(v[0], v[1], v[2]);
+          nor.push(v[3], v[4], v[5]);
+          uv.push(v[6], 1 - v[7]);
+          col.push(lin(r), lin(gr), lin(b), 1);
+        }
+        index.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 4));
+    geo.setIndex(index);
+    const mesh = new THREE.Mesh(geo, key.startsWith('t:') ? texture(key.slice(2)).mat : MATS[key]);
+    mesh.userData.live = [];
+    out.push(mesh);
+  }
+  return out;
+}
+
 /** Builds a cosmetic as a tree of objects whose matrices are set every frame. */
 function buildItem(item) {
   const root = new THREE.Group();
@@ -217,6 +472,7 @@ function buildItem(item) {
     node.matrixAutoUpdate = false;
     node.userData.part = p;
     for (const m of partMeshes(p)) node.add(m);
+    for (const m of shapeMeshes(p)) node.add(m);
     parent.add(node);
     nodes.push(node);
     for (const c of p.c || []) walk(c, node);
@@ -227,10 +483,14 @@ function buildItem(item) {
   return root;
 }
 
-function updateItem(obj, t) {
+function updateItem(obj, t, pose = null, state = null) {
+  const tr = state ? transition(state, t) : null;
   for (const node of obj.userData.nodes) {
+    const part = node.userData.part;
+    node.visible = !state || shows(part.w, state, tr);
+    if (!node.visible) continue;
     node.matrix.identity();
-    partMatrix(node.matrix, node.userData.part, t);
+    partMatrix(node.matrix, part, t, pose, tr);
     node.matrixWorldNeedsUpdate = true;
     for (const mesh of node.children) {
       if (!mesh.isMesh || !mesh.userData.live?.length) continue;
@@ -428,6 +688,9 @@ export class CosmeticViewer {
     this.pitch = 0.12;
     this.autoSpin = spin;
     this.showPlayer = player;
+    // a player model's form, face and power, and whether it walks on the spot
+    this.modelState = { form: 0, face: 0, power: false };
+    this.walking = false;
     this.t0 = performance.now();
     this.last = this.t0;
     this.seed = 1;
@@ -471,7 +734,9 @@ export class CosmeticViewer {
       wings: new THREE.Group(),
       aura: new THREE.Group(),
       pet: new THREE.Group(),
+      model: new THREE.Group(),
     };
+    this.player.root.add(this.attach.model);
     this.attach.hat.position.set(0, 8, 0);
     this.player.parts.head.add(this.attach.hat);
     this.attach.wings.position.set(0, -4, -2);
@@ -495,6 +760,20 @@ export class CosmeticViewer {
     if (this.showPlayer) this.attach[item.slot].add(obj);
     else this.stage.add(obj);
     this.slots[slot] = obj;
+    if (slot === 'model') this.modelState = { form: 0, face: 0, power: false };
+  }
+
+  /** The worn (or tried on) model, if any. */
+  get model() {
+    return this.slots.model ? this.slots.model.userData.item : null;
+  }
+
+  /** Changes the model's form, face or power: { form, face, power }. */
+  setModelState(patch) {
+    const t = (performance.now() - this.t0) / 1000;
+    const next = { ...this.modelState, ...patch };
+    if (patch.form !== undefined && patch.form !== this.modelState.form) Object.assign(next, { prev: this.modelState.form, changed: t });
+    this.modelState = next;
   }
 
   /** Shows one cosmetic on its own, centred (for thumbnails and close-ups). */
@@ -505,7 +784,8 @@ export class CosmeticViewer {
     if (!item) return;
     this.equip(item.slot, id);
     const obj = this.slots[item.slot];
-    updateItem(obj, 0.8);
+    if (item.slot === 'model') updateItem(obj, 0.8, { yaw: 0, pitch: 0, walk: 0, speed: 0, crouch: false, attack: 0 }, this.modelState);
+    else updateItem(obj, 0.8);
     obj.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(obj);
     const size = box.getSize(new THREE.Vector3());
@@ -525,10 +805,18 @@ export class CosmeticViewer {
     this.last = now;
     const t = (now - this.t0) / 1000;
     if (this.autoSpin) this.yaw += dt * 0.35;
+    const model = this.model;
+    // what a model's role parts follow: looking around, and walking on the spot when asked
+    const pose = { yaw: Math.sin(t * 0.6) * 20, pitch: Math.sin(t * 0.43) * 7, walk: t * 7, speed: this.walking ? 0.6 : 0, crouch: false, attack: 0 };
     if (this.showPlayer) {
-      const dist = 105;
-      this.camera.position.set(Math.sin(this.yaw) * Math.cos(this.pitch) * dist, 18 + Math.sin(this.pitch) * dist, Math.cos(this.yaw) * Math.cos(this.pitch) * dist);
-      this.camera.lookAt(0, 17, 0);
+      // tall models: the camera steps back to fit them
+      const tall = model ? Math.max(32, (model.m.h || [32])[Math.min(this.modelState.form, (model.m.h || [32]).length - 1)] || 32) : 32;
+      const dist = 105 * Math.max(1, tall / 34);
+      const look = model ? tall * 0.52 : 17;
+      this.camera.position.set(Math.sin(this.yaw) * Math.cos(this.pitch) * dist, look + 1 + Math.sin(this.pitch) * dist, Math.cos(this.yaw) * Math.cos(this.pitch) * dist);
+      this.camera.lookAt(0, look, 0);
+      // a model stands in for the skin, and for what the skin wears on its head and back
+      for (const g of Object.values(this.player.parts)) g.visible = !model;
       // a little life: breathing, arms swaying and the head looking around
       const p = this.player.parts;
       p.head.rotation.y = Math.sin(t * 0.6) * 0.35;
@@ -543,11 +831,16 @@ export class CosmeticViewer {
       this.camera.position.set(Math.sin(this.yaw) * dist, Math.sin(0.35) * dist, Math.cos(this.yaw) * dist);
       this.camera.lookAt(0, 0, 0);
     }
-    for (const obj of Object.values(this.slots)) if (obj) updateItem(obj, t);
-    this.scene.updateMatrixWorld(true);
-    for (const obj of Object.values(this.slots)) {
+    for (const [slot, obj] of Object.entries(this.slots)) {
       if (!obj) continue;
-      for (const f of obj.userData.fx) this.particles.emit(f, obj.matrixWorld, dt, this.rand);
+      if (slot === 'model') updateItem(obj, t, pose, this.modelState);
+      else updateItem(obj, t);
+    }
+    this.scene.updateMatrixWorld(true);
+    for (const [slot, obj] of Object.entries(this.slots)) {
+      if (!obj) continue;
+      const tr = slot === 'model' ? transition(this.modelState, t) : null;
+      for (const f of obj.userData.fx) if (slot !== 'model' || shows(f.w, this.modelState, tr)) this.particles.emit(f, obj.matrixWorld, dt, this.rand);
     }
     this.particles.update(dt, t);
     this.renderer.render(this.scene, this.camera);
@@ -608,12 +901,14 @@ export function thumbnails(ids, size, onEach) {
   viewer.yaw = 0.6;
   let i = 0;
   let stopped = false;
-  const step = () => {
+  const step = async () => {
     if (stopped) return;
     for (let k = 0; k < 4 && i < ids.length; k++, i++) {
-      viewer.showAlone(ids[i]);
       const item = byId.get(ids[i]);
-      viewer.yaw = item?.slot === 'wings' ? 0 : 0.6;
+      if (item?.slot === 'model') await texturesOf(item);
+      if (stopped) return;
+      viewer.showAlone(ids[i]);
+      viewer.yaw = item?.slot === 'wings' ? 0 : item?.slot === 'model' ? 0.35 : 0.6;
       viewer.frame(viewer.last + 16);
       onEach(ids[i], canvas.toDataURL('image/png'));
     }
