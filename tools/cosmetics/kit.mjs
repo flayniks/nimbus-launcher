@@ -287,12 +287,13 @@ export class Vox {
 // ------------------------------------------------------------------ parts
 
 /** A part: boxes from voxels (or a list), a pivot, a base rotation and animations. */
-export function part({ p = [0, 0, 0], r, s, a, vox, b, g, c, k, when, occlude } = {}) {
+export function part({ p = [0, 0, 0], r, s, a, vox, b, g, c, k, ks, when, occlude } = {}) {
   const out = { p };
   if (r && (r[0] || r[1] || r[2])) out.r = r;
   if (s && s !== 1) out.s = s;
   if (a && a.length) out.a = a;
   if (k) out.k = k;
+  if (k && ks !== undefined && ks !== 1) out.ks = ks; // how far it swings as you walk (1: like a player)
   if (when) out.w = [when.form ?? -1, when.face ?? -1, when.power ?? -1];
   const boxes = [...(b || []), ...(vox ? vox.boxes(occlude) : [])];
   if (boxes.length) out.b = boxes;

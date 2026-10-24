@@ -22,7 +22,10 @@ let boxes = 0;
 let shapes = 0;
 const round = (n) => Math.round(n * 100) / 100;
 function shape(g) {
-  if (g.t === 'mesh') return { t: 'mesh', n: g.n, v: g.v, i: g.i };
+  if (g.t === 'mesh') {
+    if (g.tex) textures.add(g.tex);
+    return { t: 'mesh', n: g.n, v: g.v, i: g.i, ...(g.tex ? { tex: g.tex, uv: 1 } : {}) };
+  }
   if (g.t !== 'ball' && g.t !== 'limb') throw new Error(`bad shape ${g.t}`);
   if (g.tex) textures.add(g.tex);
   const out = { t: g.t };
@@ -41,6 +44,7 @@ function clean(p) {
   if (p.s) out.s = round(p.s);
   if (p.a) out.a = p.a;
   if (p.k) { if (!ROLES.includes(p.k)) throw new Error(`bad role ${p.k}`); out.k = p.k; }
+  if (p.ks !== undefined) out.ks = round(p.ks);
   if (p.w) out.w = p.w;
   if (p.b) { out.b = p.b.map((b) => [...b.slice(0, 6).map(round), b[6] >>> 0, b[7] | 0, b[8] ?? 63]); boxes += p.b.length; }
   if (p.g) { out.g = p.g.map(shape); shapes += p.g.length; }

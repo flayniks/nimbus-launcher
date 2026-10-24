@@ -58,6 +58,7 @@ final class CosmeticModel {
 		Shape[] shapes = new Shape[0];
 		Part[] children = new Part[0];
 		int role = -1;
+		float ks = 1f; // how far it swings as you walk (1: like a player)
 		// shown only in this form / with this face / with the power on (1) or off (0); -1 any
 		int wf = -1;
 		int we = -1;
@@ -219,6 +220,7 @@ final class CosmeticModel {
 			String k = o.get("k").getAsString();
 			for (int i = 0; i < ROLES.length; i++) if (ROLES[i].equals(k)) p.role = i;
 		}
+		if (o.has("ks")) p.ks = o.get("ks").getAsFloat();
 		if (o.has("w")) {
 			int[] w = ints(o.getAsJsonArray("w"));
 			p.wf = w[0];
@@ -393,15 +395,21 @@ final class CosmeticModel {
 		return new float[] {(float) (o[0] + rx * rad), (float) (o[1] + ry * rad), (float) (o[2] + rz * rad), (float) (nx / l), (float) (ny / l), (float) (nz / l), (float) (ph / (2 * Math.PI)), end ? 1f : 0f};
 	}
 
-	/** A sculpted mesh: 12 bytes a vertex (int16 x, y, z in 1/64 px; int8 normal; rgb), uint16 triangles. */
+	/**
+	 * A sculpted mesh: 12 bytes a vertex (int16 x, y, z in 1/64 px; int8 normal; rgb), uint16 triangles.
+	 * One wearing a picture ("uv") has 16: its coordinates on the picture follow, as uint16 u, v.
+	 */
 	private static Shape mesh(Shape s, JsonObject o) {
 		int n = o.get("n").getAsInt();
+		boolean uv = o.has("uv") && s.tex != null;
+		int stride = uv ? 16 : 12;
+		float[] uvs = new float[n * 2];
 		ByteBuffer v = ByteBuffer.wrap(Base64.getDecoder().decode(o.get("v").getAsString())).order(ByteOrder.LITTLE_ENDIAN);
 		ByteBuffer idx = ByteBuffer.wrap(Base64.getDecoder().decode(o.get("i").getAsString())).order(ByteOrder.LITTLE_ENDIAN);
 		float[] pos = new float[n * 6];
 		int[] rgb = new int[n];
 		for (int k = 0; k < n; k++) {
-			int b = k * 12;
+			int b = k * stride;
 			pos[k * 6] = v.getShort(b) / 64f;
 			pos[k * 6 + 1] = v.getShort(b + 2) / 64f;
 			pos[k * 6 + 2] = v.getShort(b + 4) / 64f;
@@ -409,6 +417,8 @@ final class CosmeticModel {
 			pos[k * 6 + 4] = v.get(b + 7) / 127f;
 			pos[k * 6 + 5] = v.get(b + 8) / 127f;
 			rgb[k] = (v.get(b + 9) & 255) << 16 | (v.get(b + 10) & 255) << 8 | (v.get(b + 11) & 255);
+			uvs[k * 2] = uv ? (v.getShort(b + 12) & 0xFFFF) / 65535f : 0.5f;
+			uvs[k * 2 + 1] = uv ? (v.getShort(b + 14) & 0xFFFF) / 65535f : 0.5f;
 		}
 		// each triangle as a quad with its last corner twice: Minecraft draws entities in quads
 		int tris = idx.capacity() / 6;
@@ -419,8 +429,8 @@ final class CosmeticModel {
 				int vi = idx.getShort((t * 3 + Math.min(k, 2)) * 2) & 0xFFFF;
 				int at = (t * 4 + k) * 8;
 				System.arraycopy(pos, vi * 6, s.v, at, 6);
-				s.v[at + 6] = 0.5f;
-				s.v[at + 7] = 0.5f;
+				s.v[at + 6] = uvs[vi * 2];
+				s.v[at + 7] = uvs[vi * 2 + 1];
 				s.rgb[t * 4 + k] = rgb[vi];
 			}
 		}
@@ -511,9 +521,9 @@ final class CosmeticModel {
 	}
 
 	/** How a player model's role part moves (the same maths as the launcher's role()). */
-	static void role(Matrix4f m, int role, Pose pose, float t) {
+	static void role(Matrix4f m, int role, Pose pose, float t, float ks) {
 		if (role < 0 || pose == null) return;
-		float c = (float) Math.cos(pose.walk * 0.6662f) * pose.speed;
+		float c = (float) Math.cos(pose.walk * 0.6662f) * pose.speed * ks;
 		final float r2d = 1 / D2R;
 		switch (ROLES[role]) {
 			case "head", "look" -> {
@@ -580,7 +590,7 @@ final class CosmeticModel {
 			rotate(m, 'y', p.rot[1]);
 			rotate(m, 'z', p.rot[2]);
 		}
-		role(m, p.role, pose, t);
+		role(m, p.role, pose, t, p.ks);
 		for (Anim a : p.anims) animate(m, a, t);
 		if (p.s != 1f) m.scale(p.s);
 	}

@@ -147,9 +147,10 @@ export function animate(m, a, t) {
  * pose = { yaw, pitch: where the head looks, in degrees, against the body; walk: walk cycle
  * position; speed: 0 standing to 1 running; crouch; attack: 0..1 of a swing }.
  */
-export function role(m, k, pose, t) {
+export function role(m, k, pose, t, ks = 1) {
   if (!k || !pose) return;
-  const c = Math.cos(pose.walk * 0.6662) * pose.speed;
+  // ks: how far the part swings as you walk (long legs take smaller steps)
+  const c = Math.cos(pose.walk * 0.6662) * pose.speed * ks;
   switch (k) {
     case 'head':
     case 'look':
@@ -201,7 +202,7 @@ export function partMatrix(m, p, t, pose = null, tr = null) {
     if (tr.scale !== 1) m.multiply(tmp.makeScale(tr.scale, tr.scale, tr.scale));
   }
   if (p.r) { rotate(m, 'x', p.r[0]); rotate(m, 'y', p.r[1]); rotate(m, 'z', p.r[2]); }
-  role(m, p.k, pose, t);
+  role(m, p.k, pose, t, p.ks ?? 1);
   for (const a of p.a || []) animate(m, a, t);
   if (p.s) m.multiply(tmp.makeScale(p.s, p.s, p.s));
   return m;
@@ -372,8 +373,11 @@ export function meshData(g) {
   const pos = new Float32Array(g.n * 3);
   const nor = new Float32Array(g.n * 3);
   const col = new Float32Array(g.n * 3);
+  // a mesh wearing a picture has its coordinates on it too (uint16 u, v after the colour)
+  const stride = g.uv ? 16 : 12;
+  const uv = g.uv ? new Float32Array(g.n * 2) : null;
   for (let k = 0; k < g.n; k++) {
-    const o = k * 12;
+    const o = k * stride;
     pos[k * 3] = v.getInt16(o, true) / 64;
     pos[k * 3 + 1] = v.getInt16(o + 2, true) / 64;
     pos[k * 3 + 2] = v.getInt16(o + 4, true) / 64;
@@ -383,9 +387,13 @@ export function meshData(g) {
     col[k * 3] = v.getUint8(o + 9) / 255;
     col[k * 3 + 1] = v.getUint8(o + 10) / 255;
     col[k * 3 + 2] = v.getUint8(o + 11) / 255;
+    if (uv) {
+      uv[k * 2] = v.getUint16(o + 12, true) / 65535;
+      uv[k * 2 + 1] = 1 - v.getUint16(o + 14, true) / 65535;
+    }
   }
   const tri = new Uint16Array(idx.buffer, idx.byteOffset, idx.byteLength / 2);
-  g._mesh = { pos, nor, col, tri };
+  g._mesh = { pos, nor, col, uv, tri };
   return g._mesh;
 }
 
@@ -421,8 +429,9 @@ function shapeMeshes(p) {
       geo.setAttribute('position', new THREE.BufferAttribute(d.pos, 3));
       geo.setAttribute('normal', new THREE.BufferAttribute(d.nor, 3));
       geo.setAttribute('color', new THREE.BufferAttribute(Float32Array.from(d.col, lin), 3));
+      if (d.uv) geo.setAttribute('uv', new THREE.BufferAttribute(d.uv, 2));
       geo.setIndex(new THREE.BufferAttribute(d.tri, 1));
-      const mesh = new THREE.Mesh(geo, MATS.solid);
+      const mesh = new THREE.Mesh(geo, g.tex && d.uv ? texture(g.tex).mat : MATS.solid);
       mesh.userData.live = [];
       out.push(mesh);
       continue;

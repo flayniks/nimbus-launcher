@@ -1425,7 +1425,7 @@ test('import: reads CurseForge, Prism/MultiMC, ATLauncher and Modrinth App insta
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('player models: Verity is in the shop with its 17 faces, each with its picture in the game and the launcher', () => {
+test('player models: Verity is in the shop with its 17 faces and its monster, each with its picture in the game and the launcher', () => {
   const fs = require('fs');
   const path = require('path');
   const root = path.join(__dirname, '..');
@@ -1443,7 +1443,12 @@ test('player models: Verity is in the shop with its 17 faces, each with its pict
   const textures = new Set();
   const walk = (p) => { for (const g of p.g || []) if (g.tex) textures.add(g.tex); (p.c || []).forEach(walk); };
   verity.parts.forEach(walk);
-  assert.equal(textures.size, 17);
+  // the 17 faces and the monster's picture
+  assert.equal(textures.size, 18);
+  assert.equal([...textures].filter((t) => t.startsWith('verity_face_')).length, 17);
+  assert.ok(textures.has('verity_monster'));
+  assert.deepEqual(verity.m.forms, ['Ball', 'Monster']);
+  assert.match(verity.desc, /GranDussek \(CC BY 4\.0\)/);
   for (const t of textures) {
     assert.ok(fs.existsSync(path.join(root, 'mod/common/src/main/resources/assets/nimbus/textures/models', `${t}.png`)), `${t} in the mod`);
     assert.ok(fs.existsSync(path.join(root, 'src/renderer/img/models', `${t}.png`)), `${t} in the launcher`);
